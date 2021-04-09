@@ -268,6 +268,28 @@ export const Rulesets: {[k: string]: FormatData} = {
 			set.moves = moves;
 		},
 	},
+	noownabilities: {
+		effectType: 'ValidatorRule',
+		name: 'No Own Abilities',
+		desc: "Makes sure abilities match the species.",
+	  onBegin() {
+			this.add('rule', `No Own Abilities: Pokemon can't have obtainable abilities`);
+		},
+		onValidateTeam(team) {
+			const validations = []
+			for (const set of team) {
+				let ability = this.dex.abilities.get(set.ability);
+				if (!ability) continue;
+				const species = this.dex.species.get(set.species);				
+				if (Object.values(species.abilities).includes(ability.name)) {
+					validations.push(
+						`Own abilities is banned (${species.name} has ${ability.name} ability).`
+					)					
+				}			
+			}
+			return validations
+		}
+	},
 	hoennpokedex: {
 		effectType: 'ValidatorRule',
 		name: 'Hoenn Pokedex',
@@ -1085,6 +1107,7 @@ export const Rulesets: {[k: string]: FormatData} = {
 			return this.checkCanLearn(move, species, setSources, set);
 		},
 	},
+	
 	alphabetcupmovelegality: {
 		effectType: 'ValidatorRule',
 		name: 'Alphabet Cup Move Legality',
