@@ -3325,4 +3325,11 @@ export const Formats: FormatList = [
 			'Water Bubble', 'Wonder Guard', 'Baton Pass'
 		],
 	},
+	{
+		name: "[Gen 8] Random Mirror Battle (No Dmax)",
+
+		mod: 'gen8',
+		team: 'random',
+		ruleset: ['[Gen 8] Random Battle', 'Dynamax Clause', 'Mirror Clause'],
+	},
 ];

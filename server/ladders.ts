@@ -1,3 +1,4 @@
+import { PRNG } from './../sim/prng';
 /**
  * Matchmaker
  * Pokemon Showdown - http://pokemonshowdown.com/
@@ -572,12 +573,17 @@ class Ladder extends LadderStore {
 		}
 	}
 
-	static match(readies: BattleReady[]) {
+	static match(readies: BattleReady[]) {		
 		const formatid = readies[0].formatid;
+		const format = Dex.formats.get(formatid);
+
 		if (readies.some(ready => ready.formatid !== formatid)) throw new Error(`Format IDs don't match`);
 		const players = [];
+		
 		let missingUser = null;
 		let minRating = Infinity;
+		let mirrorSeed = format.baseRuleset.includes('Mirror Clause')? PRNG.generateSeed() : undefined;
+
 		for (const ready of readies) {
 			const user = Users.get(ready.userid);
 			if (!user) {
@@ -590,6 +596,7 @@ class Ladder extends LadderStore {
 				rating: ready.rating,
 				hidden: ready.settings.hidden,
 				inviteOnly: ready.settings.inviteOnly,
+				seed: mirrorSeed
 			});
 			if (ready.rating < minRating) minRating = ready.rating;
 		}
@@ -599,9 +606,9 @@ class Ladder extends LadderStore {
 			}
 			return false;
 		}
-		const format = Dex.formats.get(formatid);
 		const delayedStart = (['multi', 'freeforall'].includes(format.gameType) && players.length === 2) ?
 			'multi' : false;
+		
 		Rooms.createBattle({
 			format: formatid,
 			p1: players[0],

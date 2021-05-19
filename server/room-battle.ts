@@ -459,6 +459,7 @@ interface RoomBattlePlayerOptions {
 	rating?: number;
 	inviteOnly?: boolean;
 	hidden?: boolean;
+	seed?: PRNGSeed;
 }
 
 export interface RoomBattleOptions {
@@ -987,7 +988,7 @@ export class RoomBattle extends RoomGames.RoomGame {
 		}
 		const options = {
 			name: user.name,
-			avatar: user.avatar,
+			avatar: user.avatar,			
 		};
 		void this.stream.write(`>player ${player.slot} ` + JSON.stringify(options));
 	}
@@ -1054,6 +1055,7 @@ export class RoomBattle extends RoomGames.RoomGame {
 	addPlayer(user: User | null, playerOpts?: RoomBattlePlayerOptions) {
 		// TypeScript bug: no `T extends RoomGamePlayer`
 		const player = super.addPlayer(user) as RoomBattlePlayer;
+		
 		if (!player) return null;
 		const slot = player.slot;
 		this[slot] = player;
@@ -1064,7 +1066,9 @@ export class RoomBattle extends RoomGames.RoomGame {
 				avatar: user ? '' + user.avatar : '',
 				team: playerOpts.team || undefined,
 				rating: Math.round(playerOpts.rating || 0),
+				seed: playerOpts.seed		
 			};
+			console.log(options)
 			void this.stream.write(`>player ${slot} ${JSON.stringify(options)}`);
 		}
 

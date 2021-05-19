@@ -1022,6 +1022,16 @@ export const Rulesets: {[k: string]: FormatData} = {
 			this.add('rule', 'Dynamax Clause: You cannot dynamax');
 		},
 	},
+	mirrorclause: {
+		effectType: 'Rule',
+		name: 'Mirror Clause',
+		desc: "Generate mirror random battle",
+		onValidateSet(set) {			
+		},
+		onBegin() {			
+			this.add('rule', 'Mirror Clause: Both player have the same team');
+		},
+	},
 	arceusevlimit: {
 		effectType: 'ValidatorRule',
 		name: 'Arceus EV Limit',
