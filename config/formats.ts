@@ -3330,6 +3330,6 @@ export const Formats: FormatList = [
 
 		mod: 'gen8',
 		team: 'random',
-		ruleset: ['[Gen 8] Random Battle', 'Dynamax Clause', 'Mirror Clause'],
+		ruleset: ['[Gen 8] Random Battle', 'Dynamax Clause', 'Mirror Clause', 'Team Preview'],
 	},
 ];

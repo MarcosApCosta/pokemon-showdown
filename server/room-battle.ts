@@ -1067,8 +1067,7 @@ export class RoomBattle extends RoomGames.RoomGame {
 				team: playerOpts.team || undefined,
 				rating: Math.round(playerOpts.rating || 0),
 				seed: playerOpts.seed		
-			};
-			console.log(options)
+			};			
 			void this.stream.write(`>player ${slot} ${JSON.stringify(options)}`);
 		}
 
