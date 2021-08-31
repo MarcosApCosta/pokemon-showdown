@@ -127,6 +127,7 @@ export const translations: Translations = {
 		"This ${Config.groups[targetUser.group].name} is too busy to answer private messages right now. Please contact a different staff member.": "",
 		"If you need help, try opening a <a href=\"view-help-request\" class=\"button\">help ticket</a>": "",
 		"You are blocking private messages right now.": "",
+		"You are blocking challenges right now.": "",
 
 		"Your message contained banned words in this room.": "发言内容包含了房间内禁止词汇",
 		"You can't send the same message again so soon.": "同样的句子不能及时发出",
@@ -142,6 +143,8 @@ export const translations: Translations = {
 		"You are already blocking challenges!": "您已屏蔽挑战请求",
 		"You are already available for challenges!": "您已能够接收挑战请求",
 		"You are available for challenges from now on.": "您从现在开始接收挑战请求",
+		"You are now blocking challenges, except from staff and ${rank}.": "",
+		"You are now blocking challenges, except from staff and ${status} users.": "",
 
 		"Staff FAQ": "管理FAQ",
 		"You cannot broadcast all FAQs at once.": "无法同时广播所有FAQ",
@@ -157,5 +160,10 @@ export const translations: Translations = {
 		"pages/ladderhelp": "pages/ladderhelp",
 		"pages/rng": "pages/rng",
 		"pages/staff": "pages/staff",
+
+		"- We log PMs so you can report them - staff can't look at them without permission unless there's a law enforcement reason.": "",
+		"- We log IPs to enforce bans and mutes.": "",
+		"- We use cookies to save your login info and teams, and for Google Analytics and AdSense.": "",
+		'- For more information, you can read our <a href="https://${Config.routes.root}/privacy">full privacy policy.</a>': '',
 	},
 };

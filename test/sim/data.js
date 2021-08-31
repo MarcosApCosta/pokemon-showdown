@@ -12,7 +12,7 @@ describe('Dex data', function () {
 			assert.equal(entry.name, entry.name.trim(), `Pokemon name "${entry.name}" should not start or end with whitespace`);
 
 			assert(entry.color, `Pokemon ${entry.name} must have a color.`);
-			assert(entry.heightm, `Pokemon ${entry.name} must have a heightm.`);
+			assert(entry.heightm, `Pokemon ${entry.name} must have a height.`);
 
 			if (entry.forme) {
 				// entry is a forme of a base species
@@ -49,7 +49,7 @@ describe('Dex data', function () {
 					assert.equal(entry.num, formeEntry.num, `Forme ${formeEntry.name} of ${entry.name} should have the same dex number`);
 					assert.equal(formeEntry.baseSpecies, entry.name, `Forme ${forme} of ${entry.name} should have it as a baseSpecies`);
 					if (!forme.startsWith('Pokestar')) {
-						assert(entry.formeOrder !== undefined, `${entry.name} has an otherForme "${forme}" but no formeOrder field`);
+						assert.notEqual(entry.formeOrder, undefined, `${entry.name} has an otherForme "${forme}" but no formeOrder field`);
 						assert(entry.formeOrder.includes(forme), `Forme "${forme}" of ${entry.name} is not included in its formeOrder`);
 					}
 				}
@@ -76,7 +76,7 @@ describe('Dex data', function () {
 					assert(!forme.endsWith("-"), `Cosmetic forme name "${forme}" of ${entry.name} should not end with a hyphen`);
 					assert.equal(forme, forme.trim(), `Cosmetic forme name "${forme}" of ${entry.name} should not start or end with whitespace`);
 					if (!forme.startsWith('Pokestar')) {
-						assert(entry.formeOrder !== undefined, `${entry.name} has a cosmetic forme "${forme}" but no formeOrder field`);
+						assert.notEqual(entry.formeOrder, undefined, `${entry.name} has a cosmetic forme "${forme}" but no formeOrder field`);
 						assert(entry.formeOrder.includes(forme), `Cosmetic forme name "${forme}" of ${entry.name} is not included in its formeOrder`);
 					}
 				}
@@ -138,11 +138,22 @@ describe('Dex data', function () {
 		}
 	});
 
-	it('should have valid Formats entries', function () {
-		const Formats = Dex.data.Rulesets;
-		for (const formatid in Formats) {
-			const entry = Formats[formatid];
-			assert.equal(toID(entry.name), formatid, `Mismatched Format/Ruleset key "${formatid}" of "${entry.name}"`);
+	it('should have valid Rulesets entries', function () {
+		const Rulesets = Dex.data.Rulesets;
+		for (const formatid in Rulesets) {
+			const entry = Rulesets[formatid];
+			assert.equal(toID(entry.name), formatid, `Mismatched Ruleset key "${formatid}" of "${entry.name}"`);
+		}
+	});
+
+	it('should have valid Formats (slow)', function () {
+		for (const format of Dex.formats.all()) {
+			try {
+				Dex.formats.getRuleTable(format);
+			} catch (e) {
+				e.message = `${format.name}: ${e.message}`;
+				throw e;
+			}
 		}
 	});
 
@@ -157,7 +168,7 @@ describe('Dex data', function () {
 
 	it('should have valid Learnsets entries', function () {
 		this.timeout(0);
-		const learnsetsArray = [Dex.mod('gen2').data.Learnsets, Dex.mod('letsgo').data.Learnsets, Dex.data.Learnsets];
+		const learnsetsArray = [Dex.mod('gen2').data.Learnsets, Dex.mod('gen7letsgo').data.Learnsets, Dex.data.Learnsets];
 		for (const Learnsets of learnsetsArray) {
 			for (const speciesid in Learnsets) {
 				const species = Dex.species.get(speciesid);

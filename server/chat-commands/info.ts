@@ -9,8 +9,9 @@
  * @license MIT
  */
 import * as net from 'net';
-import {YoutubeInterface} from '../chat-plugins/youtube';
+import {YouTube, Twitch} from '../chat-plugins/youtube';
 import {Net, Utils} from '../../lib';
+import {RoomSections} from './room-settings';
 
 const ONLINE_SYMBOL = ` \u25C9 `;
 const OFFLINE_SYMBOL = ` \u25CC `;
@@ -46,7 +47,7 @@ export function findFormats(targetId: string, isOMSearch = false) {
 		const formatId = /^gen\d+/.test(targetId) ? format.id : format.id.slice(4);
 		if (
 			!targetId || format[targetId + 'Show' as 'searchShow'] || sectionId === targetId ||
-			formatId.startsWith(targetId) || exactFormat
+			formatId.startsWith(targetId) || exactFormat.exists
 		) {
 			if (isOMSearch) {
 				const officialFormats = [
@@ -64,7 +65,7 @@ export function findFormats(targetId: string, isOMSearch = false) {
 	return {totalMatches, sections};
 }
 
-export const commands: ChatCommands = {
+export const commands: Chat.ChatCommands = {
 	ip: 'whois',
 	rooms: 'whois',
 	alt: 'whois',
@@ -74,12 +75,12 @@ export const commands: ChatCommands = {
 	profile: 'whois',
 	whois(target, room, user, connection, cmd) {
 		if (room?.roomid === 'staff' && !this.runBroadcast()) return;
-		const targetUser = this.targetUserOrSelf(target, user.tempGroup === ' ');
+		const targetUser = this.getUserOrSelf(target, {exactName: user.tempGroup === ' '});
 		const showAll = (cmd === 'ip' || cmd === 'whoare' || cmd === 'alt' || cmd === 'alts' || cmd === 'altsnorecurse');
 		const showRecursiveAlts = showAll && (cmd !== 'altsnorecurse');
 		if (!targetUser) {
 			if (showAll) return this.parse('/offlinewhois ' + target);
-			return this.errorReply("User " + this.targetUsername + " not found.");
+			return this.errorReply(`User ${target} not found.`);
 		}
 		if (showAll && !user.trusted && targetUser !== user) {
 			return this.errorReply(`/${cmd} - Access denied.`);
@@ -101,6 +102,9 @@ export const commands: ChatCommands = {
 		}
 		if (Config.groups[targetUser.tempGroup]?.name) {
 			buf += Utils.html`<br />Global ${Config.groups[targetUser.tempGroup].name} (${targetUser.tempGroup})`;
+		}
+		if (Users.globalAuth.sectionLeaders.has(targetUser.id)) {
+			buf += Utils.html`<br />Section Leader (${RoomSections.sectionNames[Users.globalAuth.sectionLeaders.get(targetUser.id)!]})`;
 		}
 		if (targetUser.isSysop) {
 			buf += `<br />(Pok&eacute;mon Showdown System Operator)`;
@@ -142,8 +146,14 @@ export const commands: ChatCommands = {
 
 		if (canViewAlts) {
 			let prevNames = targetUser.previousIDs.map(userid => {
-				const punishment = Punishments.userids.get(userid);
-				return `${userid}${punishment ? ` (${Punishments.punishmentTypes.get(punishment[0]) || `punished`}${punishment[1] !== targetUser.id ? ` as ${punishment[1]}` : ``})` : ``}`;
+				const punishments = Punishments.userids.get(userid);
+				if (!punishments || !user.can('alts')) return userid;
+				return punishments.map(
+					punishment => (
+						`${userid}${punishment ? ` (${Punishments.punishmentTypes.get(punishment.type)?.desc || `punished`}` +
+						`${punishment.id !== targetUser.id ? ` as ${punishment.id}` : ``})` : ``}`
+					)
+				).join(' | ');
 			}).join(", ");
 			if (prevNames) buf += Utils.html`<br />Previous names: ${prevNames}`;
 
@@ -151,14 +161,19 @@ export const commands: ChatCommands = {
 				if (!targetAlt.named && !targetAlt.connected) continue;
 				if (targetAlt.tempGroup === '~' && user.tempGroup !== '~') continue;
 
-				const punishment = Punishments.userids.get(targetAlt.id);
-				const punishMsg = punishment ? ` (${Punishments.punishmentTypes.get(punishment[0]) || 'punished'}` +
-					`${punishment[1] !== targetAlt.id ? ` as ${punishment[1]}` : ''})` : '';
+				const punishments = Punishments.userids.get(targetAlt.id) || [];
+				const punishMsg = !user.can('alts') ? '' : punishments.map(punishment => (
+					` (${Punishments.punishmentTypes.get(punishment.type)?.desc || 'punished'}` +
+					`${punishment.id !== targetAlt.id ? ` as ${punishment.id}` : ''})`
+				)).join(' | ');
 				buf += Utils.html`<br />Alt: <span class="username">${targetAlt.name}</span>${punishMsg}`;
 				if (!targetAlt.connected) buf += ` <em style="color:gray">(offline)</em>`;
 				prevNames = targetAlt.previousIDs.map(userid => {
 					const p = Punishments.userids.get(userid);
-					return `${userid}${p ? ` (${Punishments.punishmentTypes.get(p[0]) || 'punished'}${p[1] !== targetAlt.id ? ` as ${p[1]}` : ``})` : ``}`;
+					if (!p || !user.can('alts')) return userid;
+					return p.map(
+						cur => `${userid} (${Punishments.punishmentTypes.get(cur.type)?.desc || 'punished'}` + `${cur.id !== targetAlt.id ? ` as ${cur.id}` : ``})`
+					).join(' | ');
 				}).join(", ");
 				if (prevNames) buf += `<br />Previous names: ${prevNames}`;
 			}
@@ -166,11 +181,11 @@ export const commands: ChatCommands = {
 		if (canViewPunishments) {
 			if (targetUser.namelocked) {
 				buf += `<br />NAMELOCKED: ${targetUser.namelocked}`;
-				const punishment = Punishments.userids.get(targetUser.locked!);
+				const punishment = Punishments.userids.getByType(targetUser.locked!, 'NAMELOCK');
 				if (punishment) {
 					const expiresIn = Punishments.checkLockExpiration(targetUser.locked);
 					if (expiresIn) buf += expiresIn;
-					if (punishment[3]) buf += Utils.html` (reason: ${punishment[3]})`;
+					if (punishment.reason) buf += Utils.html` (reason: ${punishment.reason})`;
 				}
 			} else if (targetUser.locked) {
 				buf += `<br />LOCKED: ${targetUser.locked}`;
@@ -182,26 +197,33 @@ export const commands: ChatCommands = {
 					buf += ` - host is permanently locked for being a proxy`;
 					break;
 				}
-				const punishment = Punishments.userids.get(targetUser.locked);
+				const punishment = Punishments.userids.getByType(targetUser.locked, 'LOCK');
 				if (punishment) {
 					const expiresIn = Punishments.checkLockExpiration(targetUser.locked);
 					if (expiresIn) buf += expiresIn;
-					if (punishment[3]) buf += Utils.html` (reason: ${punishment[3]})`;
+					if (punishment.reason) buf += Utils.html` (reason: ${punishment.reason})`;
 				}
 			}
 
 			const battlebanned = Punishments.isBattleBanned(targetUser);
 			if (battlebanned) {
-				buf += `<br />BATTLEBANNED: ${battlebanned[1]}`;
-				buf += ` (expires ${Punishments.checkPunishmentExpiration(battlebanned)})`;
-				if (battlebanned[3]) buf += Utils.html` (reason: ${battlebanned[3]})`;
+				buf += `<br />BATTLEBANNED: ${battlebanned.id}`;
+				buf += ` ${Punishments.checkPunishmentExpiration(battlebanned)}`;
+				if (battlebanned.reason) buf += Utils.html` (reason: ${battlebanned.reason})`;
 			}
 
 			const groupchatbanned = Punishments.isGroupchatBanned(targetUser);
 			if (groupchatbanned) {
-				buf += `<br />Banned from using groupchats${groupchatbanned[1] !== targetUser.id ? `: ${groupchatbanned[1]}` : ``}`;
+				buf += `<br />Banned from using groupchats${groupchatbanned.id !== targetUser.id ? `: ${groupchatbanned.id}` : ``}`;
 				buf += ` ${Punishments.checkPunishmentExpiration(groupchatbanned)}`;
-				if (groupchatbanned[3]) buf += Utils.html` (reason: ${groupchatbanned[3]})`;
+				if (groupchatbanned.reason) buf += Utils.html` (reason: ${groupchatbanned.reason})`;
+			}
+
+			const ticketbanned = Punishments.isTicketBanned(targetUser.id);
+			if (ticketbanned) {
+				buf += `<br />Banned from creating help tickets${ticketbanned.id !== targetUser.id ? `: ${ticketbanned.id}` : ``}`;
+				buf += ` ${Punishments.checkPunishmentExpiration(ticketbanned)}`;
+				if (ticketbanned.reason) buf += Utils.html` (reason: ${ticketbanned.reason})`;
 			}
 
 			if (targetUser.semilocked) {
@@ -211,12 +233,14 @@ export const commands: ChatCommands = {
 		if (user === targetUser ? user.can('ipself') : user.can('ip', targetUser)) {
 			const ips = targetUser.ips.map(ip => {
 				const status = [];
-				const punishment = Punishments.ips.get(ip);
-				if (user.can('alts') && punishment) {
-					const [punishType, userid] = punishment;
-					let punishMsg = Punishments.punishmentTypes.get(punishType) || 'punished';
-					if (userid !== targetUser.id) punishMsg += ` as ${userid}`;
-					status.push(punishMsg);
+				const punishments = Punishments.ips.get(ip);
+				if (user.can('alts') && punishments) {
+					for (const punishment of punishments) {
+						const {type, id} = punishment;
+						let punishMsg = Punishments.punishmentTypes.get(type)?.desc || type;
+						if (id !== targetUser.id) punishMsg += ` as ${id}`;
+						status.push(punishMsg);
+					}
 				}
 				if (Punishments.sharedIps.has(ip)) {
 					let sharedStr = 'shared';
@@ -266,9 +290,8 @@ export const commands: ChatCommands = {
 				buf += `<br />Room punishments: `;
 
 				buf += punishments.map(([curRoom, curPunishment]) => {
-					const [punishType, punishUserid, expireTime, reason] = curPunishment;
-					let punishDesc = Punishments.roomPunishmentTypes.get(punishType);
-					if (!punishDesc) punishDesc = `punished`;
+					const {type: punishType, id: punishUserid, expireTime, reason} = curPunishment;
+					let punishDesc = Punishments.roomPunishmentTypes.get(punishType)?.desc || punishType;
 					if (punishUserid !== targetUser.id) punishDesc += ` as ${punishUserid}`;
 					const expiresIn = new Date(expireTime).getTime() - Date.now();
 					const expireString = Chat.toDurationString(expiresIn, {precision: 1});
@@ -315,20 +338,26 @@ export const commands: ChatCommands = {
 		if (Config.groups[group]?.name) {
 			buf += `<br />Global ${Config.groups[group].name} (${group})`;
 		}
+		if (Users.globalAuth.sectionLeaders.has(userid)) {
+			buf += `<br />Section Leader (${RoomSections.sectionNames[Users.globalAuth.sectionLeaders.get(userid)!]})`;
+		}
 
 		buf += `<br /><br />`;
 		let atLeastOne = false;
 
-		const punishment = Punishments.userids.get(userid);
-		if (punishment) {
-			const [punishType, punishUserid, , reason] = punishment;
-			const punishName = (Punishments.punishmentTypes.get(punishType) || punishType).toUpperCase();
-			buf += `${punishName}: ${punishUserid}`;
-			const expiresIn = Punishments.checkLockExpiration(userid);
-			if (expiresIn) buf += expiresIn;
-			if (reason) buf += Utils.html` (reason: ${reason})`;
-			buf += '<br />';
-			atLeastOne = true;
+		const idPunishments = Punishments.userids.get(userid);
+		if (idPunishments) {
+			for (const p of idPunishments) {
+				const {type: punishType, id: punishUserid, reason} = p;
+				if (!user.can('alts') && !['LOCK', 'BAN'].includes(punishType)) continue;
+				const punishDesc = (Punishments.punishmentTypes.get(punishType)?.desc || punishType);
+				buf += `${punishDesc}: ${punishUserid}`;
+				const expiresIn = Punishments.checkLockExpiration(userid);
+				if (expiresIn) buf += expiresIn;
+				if (reason) buf += Utils.html` (reason: ${reason})`;
+				buf += '<br />';
+				atLeastOne = true;
+			}
 		}
 
 		if (!user.can('alts') && !atLeastOne) {
@@ -344,9 +373,8 @@ export const commands: ChatCommands = {
 			buf += `<br />Room punishments: `;
 
 			buf += punishments.map(([curRoom, curPunishment]) => {
-				const [punishType, punishUserid, expireTime, reason] = curPunishment;
-				let punishDesc = Punishments.roomPunishmentTypes.get(punishType);
-				if (!punishDesc) punishDesc = `punished`;
+				const {type: punishType, id: punishUserid, expireTime, reason} = curPunishment;
+				let punishDesc = Punishments.roomPunishmentTypes.get(punishType)?.desc || punishType;
 				if (punishUserid !== userid) punishDesc += ` as ${punishUserid}`;
 				const expiresIn = new Date(expireTime).getTime() - Date.now();
 				const expireString = Chat.toDurationString(expiresIn, {precision: 1});
@@ -411,7 +439,7 @@ export const commands: ChatCommands = {
 		const dnsblMessage = dnsbl ? ` [${dnsbl}]` : ``;
 		this.sendReply(`IP ${target}: ${host || "ERROR"} [${hostType}]${dnsblMessage}`);
 	},
-	hosthelp: [`/host [ip] - Gets the host for a given IP. Requires: @ &`],
+	hosthelp: [`/host [ip] - Gets the host for a given IP. Requires: % @ &`],
 
 	searchip: 'ipsearch',
 	ipsearchall: 'ipsearch',
@@ -420,7 +448,7 @@ export const commands: ChatCommands = {
 		if (!target.trim()) return this.parse(`/help ipsearch`);
 		this.checkCan('rangeban');
 
-		let [ip, roomid] = this.splitOne(target);
+		const [ipOrHost, roomid] = this.splitOne(target);
 		const targetRoom = roomid ? Rooms.get(roomid) : null;
 		if (typeof targetRoom === 'undefined') {
 			return this.errorReply(`The room "${roomid}" does not exist.`);
@@ -428,47 +456,44 @@ export const commands: ChatCommands = {
 		const results: string[] = [];
 		const isAll = (cmd === 'ipsearchall');
 
-		// If the IP is a range ending with *, we remove the *, so we have to keep track of that now
-		// so that we can properly determine if a lack of users is caused by invalid input or if it's just an empty range.
-		const isValidRange = ip.endsWith('*') && IPTools.ipRangeRegex.test(ip);
-		if (/[a-z]/.test(ip)) {
+		if (/[a-z]/.test(ipOrHost)) {
 			// host
-			this.sendReply(`Users with host ${ip}${targetRoom ? ` in the room ${targetRoom.title}` : ``}:`);
+			this.sendReply(`Users with host ${ipOrHost}${targetRoom ? ` in the room ${targetRoom.title}` : ``}:`);
 			for (const curUser of Users.users.values()) {
-				if (results.length > 100 && !isAll) continue;
-				if (!curUser.latestHost?.endsWith(ip)) continue;
+				if (results.length > 100 && !isAll) break;
+				if (!curUser.latestHost?.endsWith(ipOrHost)) continue;
 				if (targetRoom && !curUser.inRooms.has(targetRoom.roomid)) continue;
 				results.push(`${curUser.connected ? ONLINE_SYMBOL : OFFLINE_SYMBOL} ${curUser.name}`);
 			}
-			if (results.length > 100 && !isAll) {
-				return this.sendReply(`More than 100 users match the specified IP range. Use /ipsearchall to retrieve the full list.`);
-			}
-		} else if (isValidRange) {
-			// IP range
-			this.sendReply(`Users in IP range ${ip}${targetRoom ? ` in the room ${targetRoom.title}` : ``}:`);
-			ip = ip.slice(0, -1);
+		} else if (IPTools.ipRegex.test(ipOrHost)) {
+			// ip
+			this.sendReply(`Users with IP ${ipOrHost}${targetRoom ? ` in the room ${targetRoom.title}` : ``}:`);
 			for (const curUser of Users.users.values()) {
-				if (results.length > 100 && !isAll) continue;
-				if (!curUser.latestIp.startsWith(ip)) continue;
+				if (curUser.latestIp !== ipOrHost) continue;
 				if (targetRoom && !curUser.inRooms.has(targetRoom.roomid)) continue;
 				results.push(`${curUser.connected ? ONLINE_SYMBOL : OFFLINE_SYMBOL} ${curUser.name}`);
 			}
-			if (results.length > 100 && !isAll) {
-				return this.sendReply(`More than 100 users match the specified IP range. Use /ipsearchall to retrieve the full list.`);
+		} else if (IPTools.isValidRange(ipOrHost)) {
+			// range
+			this.sendReply(`Users in IP range ${ipOrHost}${targetRoom ? ` in the room ${targetRoom.title}` : ``}:`);
+			const checker = IPTools.checker(ipOrHost);
+			for (const curUser of Users.users.values()) {
+				if (results.length > 100 && !isAll) continue;
+				if (!checker(curUser.latestIp)) continue;
+				if (targetRoom && !curUser.inRooms.has(targetRoom.roomid)) continue;
+				results.push(`${curUser.connected ? ONLINE_SYMBOL : OFFLINE_SYMBOL} ${curUser.name}`);
 			}
 		} else {
-			this.sendReply(`Users with IP ${ip}${targetRoom ? ` in the room ${targetRoom.title}` : ``}:`);
-			for (const curUser of Users.users.values()) {
-				if (curUser.latestIp !== ip) continue;
-				if (targetRoom && !curUser.inRooms.has(targetRoom.roomid)) continue;
-				results.push(`${curUser.connected ? ONLINE_SYMBOL : OFFLINE_SYMBOL} ${curUser.name}`);
-			}
+			return this.errorReply(`${ipOrHost} is not a valid IP, IP range, or host.`);
 		}
+
 		if (!results.length) {
-			if (!isValidRange && !IPTools.ipRegex.test(ip)) return this.errorReply(`${ip} is not a valid IP or host.`);
 			return this.sendReply(`No users found.`);
 		}
-		return this.sendReply(results.join('; '));
+		this.sendReply(results.slice(0, 100).join('; '));
+		if (results.length > 100 && !isAll) {
+			this.sendReply(`More than 100 users found. Use /ipsearchall for the full list.`);
+		}
 	},
 	ipsearchhelp: [`/ipsearch [ip|range|host], (room) - Find all users with specified IP, IP range, or host. If a room is provided only users in the room will be shown. Requires: &`],
 
@@ -480,36 +505,20 @@ export const commands: ChatCommands = {
 			this.errorReply(`This command must be broadcast:`);
 			return this.parse(`/help checkchallenges`);
 		}
-		target = this.splitTarget(target);
-		const user1 = this.targetUser;
-		const user2 = Users.get(target);
-		if (!user1 || !user2 || user1 === user2) return this.parse(`/help checkchallenges`);
+		if (!target || !target.includes(',')) return this.parse(`/help checkchallenges`);
+		const {targetUser: user1, rest} = this.requireUser(target);
+		const {targetUser: user2, rest: rest2} = this.requireUser(rest);
+		if (user1 === user2 || rest2) return this.parse(`/help checkchallenges`);
 		if (!(user1.id in room.users) || !(user2.id in room.users)) {
 			return this.errorReply(`Both users must be in this room.`);
 		}
-		const challenges = [];
-		const user1Challs = Ladders.challenges.get(user1.id);
-		if (user1Challs) {
-			for (const chall of user1Challs) {
-				if (chall.from === user1.id && Users.get(chall.to) === user2) {
-					challenges.push(Utils.html`${user1.name} is challenging ${user2.name} in ${Dex.formats.get(chall.formatid).name}.`);
-					break;
-				}
-			}
-		}
-		const user2Challs = Ladders.challenges.get(user2.id);
-		if (user2Challs) {
-			for (const chall of user2Challs) {
-				if (chall.from === user2.id && Users.get(chall.to) === user1) {
-					challenges.push(Utils.html`${user2.name} is challenging ${user1.name} in ${Dex.formats.get(chall.formatid).name}.`);
-					break;
-				}
-			}
-		}
-		if (!challenges.length) {
+		const chall = Ladders.challenges.search(user1.id, user2.id);
+
+		if (!chall) {
 			return this.sendReplyBox(Utils.html`${user1.name} and ${user2.name} are not challenging each other.`);
 		}
-		this.sendReplyBox(challenges.join(`<br />`));
+		const [from, to] = user1.id === chall.from ? [user1, user2] : [user2, user1];
+		this.sendReplyBox(Utils.html`${from.name} is challenging ${to.name} in ${Dex.formats.get(chall.format).name}.`);
 	},
 	checkchallengeshelp: [`!checkchallenges [user1], [user2] - Check if the specified users are challenging each other. Requires: * @ # &`],
 
@@ -538,10 +547,10 @@ export const commands: ChatCommands = {
 		const gen = parseInt(cmd.substr(-1));
 		if (gen) target += `, gen${gen}`;
 
+		const {dex, format, targets} = this.splitFormat(target, true);
+
 		let buffer = '';
-		let sep = target.split(',');
-		if (sep.length !== 2) sep = [target];
-		target = sep[0].trim();
+		target = targets.join(',');
 		const targetId = toID(target);
 		if (!targetId) return this.parse('/help data');
 		const targetNum = parseInt(target);
@@ -552,20 +561,6 @@ export const commands: ChatCommands = {
 					break;
 				}
 			}
-		}
-		let dex = Dex;
-		let format: Format | null = null;
-		if (sep[1] && toID(sep[1]) in Dex.dexes) {
-			dex = Dex.mod(toID(sep[1]));
-		} else if (sep[1]) {
-			format = Dex.formats.get(sep[1]);
-			if (!format.exists) {
-				return this.errorReply(`Unrecognized format or mod "${format.name}"`);
-			}
-			dex = Dex.mod(format.mod);
-		} else if (room?.battle) {
-			format = Dex.formats.get(room.battle.format);
-			dex = Dex.mod(format.mod);
 		}
 		const newTargets = dex.dataSearch(target);
 		const showDetails = (cmd.startsWith('dt') || cmd === 'details');
@@ -715,7 +710,7 @@ export const commands: ChatCommands = {
 					if (move.flags['sound']) details["&#10003; Sound"] = "";
 					if (move.flags['bullet']) details["&#10003; Bullet"] = "";
 					if (move.flags['pulse']) details["&#10003; Pulse"] = "";
-					if (!move.flags['protect'] && !/(ally|self)/i.test(move.target)) details["&#10003; Bypasses Protect"] = "";
+					if (!move.flags['protect'] && move.target !== 'self') details["&#10003; Bypasses Protect"] = "";
 					if (move.flags['authentic']) details["&#10003; Bypasses Substitutes"] = "";
 					if (move.flags['defrost']) details["&#10003; Thaws user"] = "";
 					if (move.flags['bite']) details["&#10003; Bite"] = "";
@@ -812,7 +807,7 @@ export const commands: ChatCommands = {
 						Gen: String(ability.gen) || 'CAP',
 					};
 					if (ability.isPermanent) details["&#10003; Not affected by Gastro Acid"] = "";
-					if (ability.isUnbreakable) details["&#10003; Not affected by Mold Breaker"] = "";
+					if (ability.isBreakable) details["&#10003; Ignored by Mold Breaker"] = "";
 				}
 				break;
 			default:
@@ -820,10 +815,9 @@ export const commands: ChatCommands = {
 			}
 
 			if (showDetails) {
-				buffer += `|raw|<font size="1">${Object.keys(details).map(detail => {
-					if (details[detail] === '') return detail;
-					return `<font color="#686868">${detail}:</font> ${details[detail]}`;
-				}).join("&nbsp;|&ThickSpace;")}</font>\n`;
+				buffer += `|raw|<font size="1">${Object.entries(details).map(([detail, value]) => (
+					value === '' ? detail : `<font color="#686868">${detail}:</font> ${value}`
+				)).join("&nbsp;|&ThickSpace;")}</font>\n`;
 			}
 		}
 		this.sendReply(buffer);
@@ -863,27 +857,18 @@ export const commands: ChatCommands = {
 	weakness(target, room, user) {
 		if (!target) return this.parse('/help weakness');
 		if (!this.runBroadcast()) return;
-		target = target.trim();
-		const targets = target.split(/[,/]/).map(toID);
-		const maybeMod = targets[targets.length - 1];
-		let mod = Dex;
-		let format: Format | null = null;
+		const {dex, targets} = this.splitFormat(target.split(/[,/]/).map(toID));
+
 		let isInverse = false;
-		if (maybeMod && maybeMod in Dex.dexes) {
-			mod = Dex.mod(maybeMod);
-			targets.pop();
-		} else if (room?.battle) {
-			format = Dex.formats.get(room.battle.format);
-			mod = Dex.mod(format.mod);
-		}
-		if (maybeMod === 'inverse') {
+		if (targets[targets.length - 1] === 'inverse') {
 			isInverse = true;
 			targets.pop();
 		}
-		let species: {types: string[], [k: string]: any} = mod.species.get(targets[0]);
-		const type1 = mod.types.get(targets[0]);
-		const type2 = mod.types.get(targets[1]);
-		const type3 = mod.types.get(targets[2]);
+
+		let species: {types: string[], [k: string]: any} = dex.species.get(targets[0]);
+		const type1 = dex.types.get(targets[0]);
+		const type2 = dex.types.get(targets[1]);
+		const type3 = dex.types.get(targets[2]);
 
 		if (species.exists) {
 			target = species.name;
@@ -900,7 +885,7 @@ export const commands: ChatCommands = {
 			}
 
 			if (types.length === 0) {
-				return this.sendReplyBox(Utils.html`${target} isn't a recognized type or Pokemon${Dex.gen > mod.gen ? ` in Gen ${mod.gen}` : ""}.`);
+				return this.sendReplyBox(Utils.html`${target} isn't a recognized type or Pokemon${Dex.gen > dex.gen ? ` in Gen ${dex.gen}` : ""}.`);
 			}
 			species = {types: types};
 			target = types.join("/");
@@ -909,11 +894,11 @@ export const commands: ChatCommands = {
 		const weaknesses = [];
 		const resistances = [];
 		const immunities = [];
-		for (const type of mod.types.names()) {
-			const notImmune = mod.getImmunity(type, species);
+		for (const type of dex.types.names()) {
+			const notImmune = dex.getImmunity(type, species);
 			if (notImmune || isInverse) {
 				let typeMod = !notImmune && isInverse ? 1 : 0;
-				typeMod += (isInverse ? -1 : 1) * mod.getEffectiveness(type, species);
+				typeMod += (isInverse ? -1 : 1) * dex.getEffectiveness(type, species);
 				switch (typeMod) {
 				case 1:
 					weaknesses.push(type);
@@ -951,7 +936,7 @@ export const commands: ChatCommands = {
 			trapped: "Trapping",
 		};
 		for (const status in statuses) {
-			if (!mod.getImmunity(status, species)) {
+			if (!dex.getImmunity(status, species)) {
 				immunities.push(statuses[status]);
 			}
 		}
@@ -974,7 +959,7 @@ export const commands: ChatCommands = {
 	type: 'effectiveness',
 	matchup: 'effectiveness',
 	effectiveness(target, room, user) {
-		const targets = target.split(/[,/]/).slice(0, 2);
+		const {dex, targets} = this.splitFormat(target.split(/[,/]/));
 		if (targets.length !== 2) return this.errorReply("Attacker and defender must be separated with a comma.");
 
 		let searchMethods = ['types', 'moves', 'species'];
@@ -985,12 +970,11 @@ export const commands: ChatCommands = {
 		let foundData;
 		let atkName;
 		let defName;
-		const dex: any = Dex;
 
 		for (let i = 0; i < 2; ++i) {
 			let method!: string;
 			for (const m of searchMethods) {
-				foundData = dex[m].get(targets[i]);
+				foundData = (dex as any)[m].get(targets[i]);
 				if (foundData.exists) {
 					method = m;
 					break;
@@ -1021,12 +1005,12 @@ export const commands: ChatCommands = {
 		if (!this.runBroadcast()) return;
 
 		let factor = 0;
-		if (Dex.getImmunity(source, defender) ||
+		if (dex.getImmunity(source, defender) ||
 			source.ignoreImmunity && (source.ignoreImmunity === true || source.ignoreImmunity[source.type])) {
 			let totalTypeMod = 0;
 			if (source.effectType !== 'Move' || source.category !== 'Status' && (source.basePower || source.basePowerCallback)) {
 				for (const type of defender.types) {
-					const baseMod = Dex.getEffectiveness(source, type);
+					const baseMod = dex.getEffectiveness(source, type);
 					const moveMod = source.onEffectiveness?.call({dex: Dex} as Battle, baseMod, null, type, source);
 					totalTypeMod += typeof moveMod === 'number' ? moveMod : baseMod;
 				}
@@ -1049,16 +1033,8 @@ export const commands: ChatCommands = {
 		if (!this.runBroadcast()) return;
 		if (!target) return this.parse("/help coverage");
 
-		const targets = target.split(/[,+/]/);
+		const {dex, targets} = this.splitFormat(target.split(/[,+/]/));
 		const sources: (string | Move)[] = [];
-		let dex = Dex;
-		if (room?.battle) {
-			const format = Dex.formats.get(room.battle.format);
-			dex = Dex.mod(format.mod);
-		}
-		if (targets[targets.length - 1] && toID(targets[targets.length - 1]) in Dex.dexes) {
-			dex = Dex.mod(toID(targets[targets.length - 1]));
-		}
 		let dispTable = false;
 		const bestCoverage: {[k: string]: number} = {};
 		let hasThousandArrows = false;
@@ -1583,6 +1559,7 @@ export const commands: ChatCommands = {
 
 	punishments(target, room, user) {
 		if (!this.runBroadcast()) return;
+		target = toID(target);
 		const showRoom = (target !== 'global');
 		const showGlobal = (target !== 'room' && target !== 'rooms');
 
@@ -1646,12 +1623,12 @@ export const commands: ChatCommands = {
 
 	privacypolicy(target, room, user) {
 		if (!this.runBroadcast()) return;
-		this.sendReplyBox(
-			`- We log PMs so you can report them - staff can't look at them without permission unless there's a law enforcement reason.<br />` +
-			`- We log IPs to enforce bans and mutes.<br />` +
-			`- We use cookies to save your login info and teams, and for Google Analytics and AdSense.<br />` +
-			`- For more information, you can read our <a href="https://${Config.routes.root}/privacy">full privacy policy.</a>`
-		);
+		this.sendReplyBox([
+			this.tr`- We log PMs so you can report them - staff can't look at them without permission unless there's a law enforcement reason.`,
+			this.tr`- We log IPs to enforce bans and mutes.`,
+			this.tr`- We use cookies to save your login info and teams, and for Google Analytics and AdSense.`,
+			this.tr`- For more information, you can read our <a href="https://${Config.routes.root}/privacy">full privacy policy.</a>`,
+		].join(`<br />`));
 	},
 
 	suggest: 'suggestions',
@@ -1836,40 +1813,43 @@ export const commands: ChatCommands = {
 		const {totalMatches, sections} = findFormats(targetId, isOMSearch);
 
 		if (!totalMatches) return this.errorReply("No matched formats found.");
-		if (!this.runBroadcast()) return;
-		if (totalMatches === 1) {
+
+		const format = totalMatches === 1 ? Dex.formats.get(Object.values(sections)[0].formats[0]) : null;
+
+		if (!this.runBroadcast(`!formathelp ${format ? format.id : target}`)) return;
+
+		if (format) {
 			const rules: string[] = [];
 			let rulesetHtml = '';
-			const subformat = Dex.formats.get(Object.values(sections)[0].formats[0]);
-			if (['Format', 'Rule', 'ValidatorRule'].includes(subformat.effectType)) {
-				if (subformat.ruleset?.length) {
-					rules.push(`<b>Ruleset</b> - ${Utils.escapeHTML(subformat.ruleset.join(", "))}`);
+			if (['Format', 'Rule', 'ValidatorRule'].includes(format.effectType)) {
+				if (format.ruleset?.length) {
+					rules.push(`<b>Ruleset</b> - ${Utils.escapeHTML(format.ruleset.join(", "))}`);
 				}
-				if (subformat.banlist?.length) {
-					rules.push(`<b>Bans</b> - ${Utils.escapeHTML(subformat.banlist.join(", "))}`);
+				if (format.banlist?.length) {
+					rules.push(`<b>Bans</b> - ${Utils.escapeHTML(format.banlist.join(", "))}`);
 				}
-				if (subformat.unbanlist?.length) {
-					rules.push(`<b>Unbans</b> - ${Utils.escapeHTML(subformat.unbanlist.join(", "))}`);
+				if (format.unbanlist?.length) {
+					rules.push(`<b>Unbans</b> - ${Utils.escapeHTML(format.unbanlist.join(", "))}`);
 				}
-				if (subformat.restricted?.length) {
-					rules.push(`<b>Restricted</b> - ${Utils.escapeHTML(subformat.restricted.join(", "))}`);
+				if (format.restricted?.length) {
+					rules.push(`<b>Restricted</b> - ${Utils.escapeHTML(format.restricted.join(", "))}`);
 				}
 				if (rules.length > 0) {
 					rulesetHtml = `<details><summary>Banlist/Ruleset</summary>${rules.join("<br />")}</details>`;
 				} else {
-					rulesetHtml = `No ruleset found for ${subformat.name}`;
+					rulesetHtml = `No ruleset found for ${format.name}`;
 				}
 			}
-			let formatType: string = (subformat.gameType || "singles");
+			let formatType: string = (format.gameType || "singles");
 			formatType = formatType.charAt(0).toUpperCase() + formatType.slice(1).toLowerCase();
-			if (!subformat.desc && !subformat.threads) {
-				if (subformat.effectType === 'Format') {
-					return this.sendReplyBox(`No description found for this ${formatType} ${subformat.section} format.<br />${rulesetHtml}`);
+			if (!format.desc && !format.threads) {
+				if (format.effectType === 'Format') {
+					return this.sendReplyBox(`No description found for this ${formatType} ${format.section} format.<br />${rulesetHtml}`);
 				} else {
 					return this.sendReplyBox(`No description found for this rule.<br />${rulesetHtml}`);
 				}
 			}
-			const descHtml = [...(subformat.desc ? [subformat.desc] : []), ...(subformat.threads || [])];
+			const descHtml = [...(format.desc ? [format.desc] : []), ...(format.threads || [])];
 			return this.sendReplyBox(`${descHtml.join("<br />")}<br />${rulesetHtml}`);
 		}
 
@@ -2484,7 +2464,7 @@ export const commands: ChatCommands = {
 		if (!room.settings.requestShowEnabled) {
 			return this.errorReply(`Media approvals are disabled in this room.`);
 		}
-		if (user.can('showmedia', null, room)) return this.errorReply(`Use !show instead.`);
+		if (user.can('showmedia', null, room, '/show')) return this.errorReply(`Use !show instead.`);
 		if (room.pendingApprovals?.has(user.id)) return this.errorReply('You have a request pending already.');
 		if (!toID(target)) return this.parse(`/help requestshow`);
 
@@ -2541,7 +2521,6 @@ export const commands: ChatCommands = {
 			buf = Utils.html`<img src="${request.link}" width="${width}" height="${height}" />`;
 			if (resized) buf += Utils.html`<br /><a href="${request.link}" target="_blank">full-size image</a>`;
 		} else {
-			const YouTube = new YoutubeInterface();
 			buf = await YouTube.generateVideoDisplay(request.link);
 			if (!buf) return this.errorReply('Could not get YouTube video');
 		}
@@ -2595,10 +2574,16 @@ export const commands: ChatCommands = {
 		const [link, comment] = Utils.splitFirst(target, ',');
 
 		let buf;
-		const YouTube = new YoutubeInterface();
 		if (YouTube.linkRegex.test(link)) {
 			buf = await YouTube.generateVideoDisplay(link);
 			this.message = this.message.replace(/&ab_channel=(.*)(&|)/ig, '').replace(/https:\/\/www\./ig, '');
+		} else if (Twitch.linkRegex.test(link)) {
+			const channelId = Twitch.linkRegex.exec(link)?.[2]?.trim();
+			if (!channelId) return this.errorReply(`Specify a Twitch channel.`);
+			const info = await Twitch.getChannel(channelId);
+			if (!info) return this.errorReply(`Channel ${channelId} not found.`);
+			buf = `Watching <b><a class="subtle" href="https://twitch.tv/${info.url}">${info.display_name}</a></b>...<br />`;
+			buf += `<twitch src="${link}" />`;
 		} else {
 			try {
 				const [width, height, resized] = await Chat.fitImage(link);
@@ -2608,7 +2593,7 @@ export const commands: ChatCommands = {
 				return this.errorReply('Invalid image');
 			}
 		}
-		if (comment) buf += Utils.html`<br>(${comment.trim()})</div>`;
+		if (comment) buf += Utils.html`<br />(${comment.trim()})</div>`;
 
 		this.checkBroadcast();
 		if (this.broadcastMessage) {
@@ -2624,6 +2609,18 @@ export const commands: ChatCommands = {
 	showhelp: [
 		`/show [url] - Shows you an image or YouTube video.`,
 		`!show [url] - Shows an image or YouTube to everyone in a chatroom. Requires: whitelist % @ # &`,
+	],
+
+	rebroadcast(target, room, user, connection) {
+		if (!target || !target.startsWith('!') || !this.shouldBroadcast()) {
+			return this.parse('/help rebroadcast');
+		}
+		room = this.requireRoom();
+		room.lastBroadcast = '';
+		this.parse(target, {broadcastPrefix: "!rebroadcast "});
+	},
+	rebroadcasthelp: [
+		`!rebroadcast ![command] - Bypasses the broadcast cooldown to broadcast a command.`,
 	],
 
 	regdate: 'registertime',
@@ -2646,9 +2643,13 @@ export const commands: ChatCommands = {
 		// not in a try-catch block because if this doesn't work, this is a problem that should be known
 		const result = JSON.parse(rawResult);
 		const date = new Date(result.registertime * 1000);
-		const regDate = Chat.toTimestamp(date, {human: true});
-		const regTimeAgo = Chat.toDurationString(Date.now() - date.getTime(), {precision: 1});
-		this.sendReplyBox(Utils.html`The user '${target}' registered ${regTimeAgo} ago, at ${regDate}.`);
+		const duration = Date.now() - date.getTime();
+		// hardcode, since the loginserver doesn't store exact times, and
+		// so this can look quite inaccurate if it was within the last day
+		const regTimeAgo = duration > 24 * 60 * 60 * 1000 ?
+			Chat.toDurationString(duration, {precision: 1}) :
+			'less than a day';
+		this.sendReplyBox(Utils.html`The user '${target}' registered ${regTimeAgo} ago, on the date ${date.toDateString()}.`);
 	},
 	registertimehelp: [`/registertime OR /regtime [user] - Find out when [user] registered.`],
 
@@ -2693,7 +2694,7 @@ export const commands: ChatCommands = {
 	],
 };
 
-export const pages: PageTable = {
+export const pages: Chat.PageTable = {
 	battlerules(query, user) {
 		const rules = Object.values(Dex.data.Rulesets).filter(rule => rule.effectType !== "Format");
 		const tourHelp = `https://www.smogon.com/forums/threads/pok%C3%A9mon-showdown-forum-rules-resources-read-here-first.3570628/#post-6777489`;
@@ -2743,11 +2744,12 @@ export const pages: PageTable = {
 		if (!room.persist) return;
 		this.checkCan('mute', null, room);
 		// Ascending order
-		const sortedPunishments = Array.from(Punishments.getPunishments(room.roomid))
-			.sort((a, b) => a[1].expireTime - b[1].expireTime);
+		const sortedPunishments = Utils.sortBy([...Punishments.getPunishments(room.roomid)], ([id, entry]) => (
+			entry.expireTime
+		));
 		const sP = new Map();
-		for (const punishment of sortedPunishments) {
-			sP.set(punishment[0], punishment[1]);
+		for (const [id, entry] of sortedPunishments) {
+			sP.set(id, entry);
 		}
 		buf += Punishments.visualizePunishments(sP, user);
 		return buf;
@@ -2758,7 +2760,9 @@ export const pages: PageTable = {
 		if (!user.named) return Rooms.RETRY_AFTER_LOGIN;
 		this.checkCan('lock');
 		// Ascending order
-		const sortedPunishments = Array.from(Punishments.getPunishments()).sort((a, b) => a[1].expireTime - b[1].expireTime);
+		const sortedPunishments = Utils.sortBy([...Punishments.getPunishments()], ([id, entry]) => (
+			entry.expireTime
+		));
 		const sP = new Map();
 		for (const punishment of sortedPunishments) {
 			sP.set(punishment[0], punishment[1]);
@@ -2787,6 +2791,6 @@ process.nextTick(() => {
 	Dex.includeData();
 	Chat.multiLinePattern.register(
 		'/htmlbox', '/quote', '/addquote', '!htmlbox', '/addhtmlbox', '/addrankhtmlbox', '/adduhtml',
-		'/changeuhtml', '/addrankuhtmlbox', '/changerankuhtmlbox', '/addrankuhtml',
+		'/changeuhtml', '/addrankuhtmlbox', '/changerankuhtmlbox', '/addrankuhtml', '/addhtmlfaq'
 	);
 });
