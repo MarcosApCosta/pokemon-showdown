@@ -277,7 +277,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	defog: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 	},
 	detect: {
 		inherit: true,
@@ -305,7 +305,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	disable: {
 		inherit: true,
 		accuracy: 80,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 		volatileStatus: 'disable',
 		condition: {
 			durationCallback() {
@@ -428,7 +428,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	encore: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 		volatileStatus: 'encore',
 		condition: {
 			durationCallback() {
@@ -550,7 +550,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	foresight: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 	},
 	furycutter: {
 		inherit: true,
@@ -782,7 +782,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	imprison: {
 		inherit: true,
-		flags: {authentic: 1},
+		flags: {bypasssub: 1},
 		onTryHit(pokemon) {
 			for (const target of pokemon.foes()) {
 				for (const move of pokemon.moves) {
@@ -1034,7 +1034,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	miracleeye: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 	},
 	mirrormove: {
 		inherit: true,
@@ -1145,7 +1145,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	odorsleuth: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 	},
 	outrage: {
 		inherit: true,
@@ -1216,7 +1216,36 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	psychup: {
 		inherit: true,
-		flags: {snatch: 1, authentic: 1},
+		flags: {snatch: 1, bypasssub: 1},
+	},
+	pursuit: {
+		inherit: true,
+		condition: {
+			duration: 1,
+			onBeforeSwitchOut(pokemon) {
+				this.debug('Pursuit start');
+				let alreadyAdded = false;
+				for (const source of this.effectState.sources) {
+					if (!this.queue.cancelMove(source) || !source.hp) continue;
+					if (!alreadyAdded) {
+						this.add('-activate', pokemon, 'move: Pursuit');
+						alreadyAdded = true;
+					}
+					// Run through each action in queue to check if the Pursuit user is supposed to Mega Evolve this turn.
+					// If it is, then Mega Evolve before moving.
+					if (source.canMegaEvo || source.canUltraBurst) {
+						for (const [actionIndex, action] of this.queue.entries()) {
+							if (action.pokemon === source && action.choice === 'megaEvo') {
+								this.actions.runMegaEvo(source);
+								this.queue.list.splice(actionIndex, 1);
+								break;
+							}
+						}
+					}
+					this.actions.runMove('pursuit', source, source.getLocOf(pokemon));
+				}
+			},
+		},
 	},
 	pursuit: {
 		inherit: true,
@@ -1322,7 +1351,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	roar: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, sound: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, sound: 1, bypasssub: 1},
 	},
 	rockblast: {
 		inherit: true,
@@ -1438,7 +1467,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	spite: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 	},
 	stealthrock: {
 		inherit: true,
@@ -1460,7 +1489,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			},
 			onTryPrimaryHitPriority: -1,
 			onTryPrimaryHit(target, source, move) {
-				if (target === source || move.flags['authentic']) {
+				if (target === source || move.flags['bypasssub']) {
 					return;
 				}
 				let damage = this.actions.getDamage(source, target, move);
@@ -1564,7 +1593,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	taunt: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 		condition: {
 			durationCallback() {
 				return this.random(3, 6);
@@ -1601,7 +1630,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	torment: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 	},
 	toxic: {
 		inherit: true,
@@ -1638,7 +1667,37 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	transform: {
 		inherit: true,
-		flags: {authentic: 1},
+		flags: {bypasssub: 1},
+	},
+	trick: {
+		inherit: true,
+		onTryHit(target, source, move) {
+			if (target.hasAbility('multitype') || source.hasAbility('multitype')) return false;
+		},
+	},
+	trickroom: {
+		inherit: true,
+		condition: {
+			duration: 5,
+			durationCallback(source, effect) {
+				if (source?.hasAbility('persistent')) {
+					this.add('-activate', source, 'ability: Persistent', effect);
+					return 7;
+				}
+				return 5;
+			},
+			onFieldStart(target, source) {
+				this.add('-fieldstart', 'move: Trick Room', '[of] ' + source);
+			},
+			onFieldRestart(target, source) {
+				this.field.removePseudoWeather('trickroom');
+			},
+			// Speed modification is changed in Pokemon.getActionSpeed() in sim/pokemon.js
+			onFieldResidualOrder: 13,
+			onFieldEnd() {
+				this.add('-fieldend', 'move: Trick Room');
+			},
+		},
 	},
 	trick: {
 		inherit: true,
@@ -1731,7 +1790,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	whirlwind: {
 		inherit: true,
-		flags: {protect: 1, mirror: 1, authentic: 1},
+		flags: {protect: 1, mirror: 1, bypasssub: 1},
 	},
 	wish: {
 		inherit: true,
