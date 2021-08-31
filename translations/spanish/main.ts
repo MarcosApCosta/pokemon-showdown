@@ -128,6 +128,7 @@ export const translations: Translations = {
 		"This ${Config.groups[targetUser.group].name} is too busy to answer private messages right now. Please contact a different staff member.": "",
 		"If you need help, try opening a <a href=\"view-help-request\" class=\"button\">help ticket</a>": "",
 		"You are blocking private messages right now.": "",
+		"You are blocking challenges right now.": "",
 
 		"Your message contained banned words in this room.": "Tu mensaje contiene palabras prohíbidas en esta sala.",
 		"You can't send the same message again so soon.": "No puedes mandar el mismo mensaje tan pronto.",
@@ -143,6 +144,8 @@ export const translations: Translations = {
 		"You are already blocking challenges!": "¡Ya estás bloqueando solicitudes de batalla!",
 		"You are already available for challenges!": "¡Ya estás disponible para recibir solicitudes de batalla!",
 		"You are available for challenges from now on.": "Estás disponible para recibir solicitudes de batalla de ahora en adelante.",
+		"You are now blocking challenges, except from staff and ${rank}.": "",
+		"You are now blocking challenges, except from staff and ${status} users.": "",
 
 		"Staff FAQ": "FAQ del Staff",
 		"You cannot broadcast all FAQs at once.": "No puedes mostrar todos los FAQs a la vez.",
@@ -154,9 +157,14 @@ export const translations: Translations = {
 		"To join a room tournament, click the <strong>Join!</strong> button or type the command <code>/tour join</code> in the room's chat. You can check if your team is legal for the tournament by clicking the <strong>Validate</strong> button once you've joined and selected a team. To battle your opponent in the tournament, click the <strong>Ready!</strong> button when it appears. There are two different types of room tournaments: elimination (if a user loses more than a certain number of times, they are eliminated) and round robin (all users play against each other, and the user with the most wins is the winner).": "Para unirte a un torneo, haz click en el botón <strong>Join!</strong> o escribe el comando <code>/tour join</code> en el chat de la sala. Puedes revisar si tu equipo es legal para el torneo al hacer click en el botón <strong>Validate</strong> una vez te hayas unido y seleccionado un equipo. Para jugar contra tu oponente en el torneo, haz click en el botón <strong>Ready!</strong> cuando aparezca. Hay dos tipos diferentes de torneos de sala: elimination (si un usuario pierde más de cierto número de veces, es eliminado) y round robin (todos los usuarios juegan contra todos, y el usuario con más victorias es el ganador).",
 		"Frequently Asked Questions": "Preguntas Frecuentes",
 
-		"pages/faq": "pages/faq",
+		"pages/faq": "pages/faq-es",
 		"pages/ladderhelp": "pages/ladderhelp",
 		"pages/rng": "pages/rng",
-		"pages/staff": "pages/staff",
+		"pages/staff": "pages/staff-es",
+
+		"- We log PMs so you can report them - staff can't look at them without permission unless there's a law enforcement reason.": "",
+		"- We log IPs to enforce bans and mutes.": "",
+		"- We use cookies to save your login info and teams, and for Google Analytics and AdSense.": "",
+		'- For more information, you can read our <a href="https://${Config.routes.root}/privacy">full privacy policy.</a>': '- For more information, you can read our <a href="https://${Config.routes.root}/pages/privacy-es">full privacy policy.</a>',
 	},
 };

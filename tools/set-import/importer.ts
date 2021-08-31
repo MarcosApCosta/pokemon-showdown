@@ -399,7 +399,7 @@ const SMOGON = {
 const getAnalysis = retrying(async (u: string) => {
 	try {
 		return smogon.Analyses.process(await request(u));
-	} catch (err) {
+	} catch (err: any) {
 		// Don't try HTTP errors that we've already retried
 		if (err.message.startsWith('HTTP')) {
 			return Promise.reject(err);
@@ -426,18 +426,19 @@ async function getAnalysesByFormat(pokemon: string, gen: GenerationNum) {
 		}
 
 		return analysesByFormat;
-	} catch (err) {
+	} catch {
 		error(`Unable to process analysis for ${pokemon} in generation ${gen}`);
 		return undefined;
 	}
 }
 
 function getLevel(format: Format, level = 0) {
-	if (format.forcedLevel) return format.forcedLevel;
-	const maxLevel = format.maxLevel || 100;
-	const maxForcedLevel = format.maxForcedLevel || maxLevel;
-	if (!level) level = format.defaultLevel || maxLevel;
-	return level > maxForcedLevel ? maxForcedLevel : level;
+	const ruleTable = Dex.formats.getRuleTable(format);
+	if (ruleTable.adjustLevel) return ruleTable.adjustLevel;
+	const maxLevel = ruleTable.maxLevel;
+	const adjustLevelDown = ruleTable.adjustLevelDown || maxLevel;
+	if (!level) level = ruleTable.defaultLevel;
+	return level > adjustLevelDown ? adjustLevelDown : level;
 }
 
 export async function getStatisticsURL(

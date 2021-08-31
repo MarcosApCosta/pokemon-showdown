@@ -23,7 +23,7 @@ interface NetQuery {
 	options?: AnyObject;
 }
 // @ts-ignore in case the optional dependency is not installed
-type LSTM = import('brain.js').recurrent.LSTM;
+type NetModel = import('brain.js').recurrent.LSTM;
 
 interface TrainingLine {
 	input: string;
@@ -34,7 +34,7 @@ interface TrainingLine {
 function modelExists() {
 	try {
 		require.resolve('brain.js');
-	} catch (e) {
+	} catch {
 		return false;
 	}
 	return true;
@@ -45,11 +45,11 @@ function toRoomID(room: RoomID | Room) {
 }
 
 export class NeuralNetChecker {
-	model: LSTM | null;
+	model: NetModel | null;
 	constructor(path?: string) {
 		try {
 			this.model = new (require('brain.js').recurrent.LSTM)();
-		} catch (e) {
+		} catch {
 			this.model = null;
 		}
 		if (path) this.load(path);
@@ -109,7 +109,7 @@ export class NeuralNetChecker {
 		if (!this.model) return result;
 		try {
 			result = this.model.run(data);
-		} catch (e) {}
+		} catch {}
 		// usually means someone didn't train it, carry on
 		// acceptable to drop since training is very slow
 		return result;
@@ -125,7 +125,7 @@ export class NeuralNetChecker {
 	}
 }
 
-function checkAllowed(context: CommandContext) {
+function checkAllowed(context: Chat.CommandContext) {
 	if (!modelExists()) throw new Chat.ErrorMessage(`Net filters are disabled - install brain.js to use them.`);
 	const user = context.user;
 	if (WHITELIST.includes(user.id)) return true;
@@ -145,7 +145,7 @@ export const hits: {[roomid: string]: {[userid: string]: number}} = (() => {
 	return cache;
 })();
 
-export const chatfilter: ChatFilter = function (message, user, room, connection) {
+export const chatfilter: Chat.ChatFilter = function (message, user, room, connection) {
 	if (disabled || !modelExists()) return;
 	// not awaited as so to not hold up the filters (additionally we can wait on this)
 	void (async () => {
@@ -178,7 +178,7 @@ export const PM = new QueryProcessManager<NetQuery, any>(module, async query => 
 		let response = '';
 		try {
 			response = net.run(data as string);
-		} catch (e) {} // uninitialized (usually means intializing, which can be slow) - drop it for now
+		} catch {} // uninitialized (usually means intializing, which can be slow) - drop it for now
 		return response;
 	case 'train':
 		return net.train(data as TrainingLine[], options?.iterations);
@@ -187,7 +187,7 @@ export const PM = new QueryProcessManager<NetQuery, any>(module, async query => 
 	case 'load':
 		try {
 			net.load(data as string);
-		} catch (e) {
+		} catch (e: any) {
 			return e.message;
 		}
 		return 'success';
@@ -223,7 +223,7 @@ if (!PM.isParentProcess) {
 	PM.spawn(NUM_PROCESSES);
 }
 
-export const commands: ChatCommands = {
+export const commands: Chat.ChatCommands = {
 	netfilter: {
 		limit(target, room, user) {
 			checkAllowed(this);
@@ -284,12 +284,12 @@ export const commands: ChatCommands = {
 			if (cmd === 'disable') {
 				if (disabled) return this.errorReply(`Net filters are already disabled.`);
 				disabled = true;
-				this.globalModlog(`NETFILTER DISABLE`, null);
+				this.globalModlog(`NETFILTER DISABLE`);
 				logMessage = `${user.name} disabled the net filters`;
 			} else {
 				if (!disabled) return this.errorReply(`The net filters are already enabled`);
 				disabled = false;
-				this.globalModlog(`NETFILTER ENABLE`, null);
+				this.globalModlog(`NETFILTER ENABLE`);
 				logMessage = `${user.name} enabled the net filters`;
 			}
 			this.privateGlobalModAction(logMessage);
