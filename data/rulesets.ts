@@ -468,6 +468,12 @@ export const Rulesets: {[k: string]: FormatData} = {
 		desc: "Only allows two Pok&eacute;mon in battle",
 		ruleset: ['Picked Team Size = 2'],
 	},
+	sixoften: {
+		effectType: 'Rule',
+		name: 'Six of Ten',
+		desc: "Select six of ten Pok&eacute;mon in battle",
+		ruleset: ['Team Preview', 'Picked Team Size = 6', 'Max Team Size = 10'],
+	},
 	littlecup: {
 		effectType: 'ValidatorRule',
 		name: 'Little Cup',
