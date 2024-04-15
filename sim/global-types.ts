@@ -62,7 +62,7 @@ type MoveSource = string;
 
 namespace TierTypes {
 	export type Singles = "AG" | "Uber" | "(Uber)" | "OU" | "(OU)" | "UUBL" | "UU" | "RUBL" | "RU" | "NUBL" | "NU" |
-	"(NU)" | "PUBL" | "PU" | "(PU)" | "NFE" | "LC";
+	"(NU)" | "PUBL" | "PU" | "(PU)" | "ZUBL" | "ZU" | "NFE" | "LC";
 	export type Doubles = "DUber" | "(DUber)" | "DOU" | "(DOU)" | "DBL" | "DUU" | "(DUU)" | "NFE" | "LC";
 	export type Other = "Unreleased" | "Illegal" | "CAP" | "CAP NFE" | "CAP LC";
 }
@@ -85,6 +85,8 @@ interface EventInfo {
 	from?: string;
 	/** Japan-only events can't be transferred to international games in Gen 1 */
 	japan?: boolean;
+	/** For Emerald event eggs to allow Pomeg glitched moves */
+	emeraldEventEgg?: boolean;
 }
 
 type Effect = Ability | Item | ActiveMove | Species | Condition | Format;
@@ -131,7 +133,7 @@ type ModdedEffectData = EffectData | Partial<EffectData> & {inherit: true};
 
 type EffectType =
 	'Condition' | 'Pokemon' | 'Move' | 'Item' | 'Ability' | 'Format' |
-	'Nature' | 'Ruleset' | 'Weather' | 'Status' | 'Rule' | 'ValidatorRule';
+	'Nature' | 'Ruleset' | 'Weather' | 'Status' | 'Terastal' | 'Rule' | 'ValidatorRule';
 
 interface BasicEffect extends EffectData {
 	id: ID;
@@ -168,6 +170,7 @@ type ModdedSpeciesFormatsData = import('./dex-species').ModdedSpeciesFormatsData
 type LearnsetData = import('./dex-species').LearnsetData;
 type ModdedLearnsetData = import('./dex-species').ModdedLearnsetData;
 type Species = import('./dex-species').Species;
+type PokemonGoData = import('./dex-species').PokemonGoData;
 
 type FormatData = import('./dex-formats').FormatData;
 type FormatList = import('./dex-formats').FormatList;
@@ -214,8 +217,10 @@ interface BattleScriptsData {
 interface ModdedBattleActions {
 	inherit?: true;
 	afterMoveSecondaryEvent?: (this: BattleActions, targets: Pokemon[], pokemon: Pokemon, move: ActiveMove) => undefined;
-	calcRecoilDamage?: (this: BattleActions, damageDealt: number, move: Move) => number;
+	calcRecoilDamage?: (this: BattleActions, damageDealt: number, move: Move, pokemon: Pokemon) => number;
 	canMegaEvo?: (this: BattleActions, pokemon: Pokemon) => string | undefined | null;
+	canMegaEvoX?: (this: BattleActions, pokemon: Pokemon) => string | null;
+	canMegaEvoY?: (this: BattleActions, pokemon: Pokemon) => string | null;
 	canUltraBurst?: (this: BattleActions, pokemon: Pokemon) => string | null;
 	canZMove?: (this: BattleActions, pokemon: Pokemon) => ZMoveOptions | void;
 	canDynamax?: (this: BattleActions, pokemon: Pokemon, skipChecks?: boolean) => DynamaxOptions | void;
@@ -247,6 +252,8 @@ interface ModdedBattleActions {
 	) => number | undefined | false;
 	runAction?: (this: BattleActions, action: Action) => void;
 	runMegaEvo?: (this: BattleActions, pokemon: Pokemon) => boolean;
+	runMegaEvoX?: (this: BattleActions, pokemon: Pokemon) => boolean;
+	runMegaEvoY?: (this: BattleActions, pokemon: Pokemon) => boolean;
 	runMove?: (
 		this: BattleActions, moveOrMoveName: Move | string, pokemon: Pokemon, targetLoc: number, sourceEffect?: Effect | null,
 		zMove?: string, externalMove?: boolean, maxMove?: string, originalTarget?: Pokemon
@@ -255,6 +262,7 @@ interface ModdedBattleActions {
 		this: BattleActions, damage: SpreadMoveDamage, targets: SpreadMoveTargets, source: Pokemon,
 		move: ActiveMove, moveData: ActiveMove, isSecondary?: boolean, isSelf?: boolean
 	) => SpreadMoveDamage;
+	runSwitch?: (this: BattleActions, pokemon: Pokemon) => boolean;
 	runZPower?: (this: BattleActions, move: ActiveMove, pokemon: Pokemon) => void;
 	secondaries?: (
 		this: BattleActions, targets: SpreadMoveTargets, source: Pokemon, move: ActiveMove,
@@ -269,6 +277,7 @@ interface ModdedBattleActions {
 		moveData?: ActiveMove, isSecondary?: boolean, isSelf?: boolean
 	) => [SpreadMoveDamage, SpreadMoveTargets];
 	targetTypeChoices?: (this: BattleActions, targetType: string) => boolean;
+	terastallize?: (this: BattleActions, pokemon: Pokemon) => void;
 	tryMoveHit?: (
 		this: BattleActions, target: Pokemon, pokemon: Pokemon, move: ActiveMove
 	) => number | undefined | false | '';
@@ -295,12 +304,13 @@ interface ModdedBattleActions {
 	) => void;
 
 	// oms
-	doGetMixedSpecies?: (this: BattleActions, species: Species, deltas: AnyObject) => Species;
-	getMegaDeltas?: (this: BattleActions, megaSpecies: Species) => AnyObject;
-	getMixedSpecies?: (this: BattleActions, originalName: string, megaName: string) => Species;
+	mutateOriginalSpecies?: (this: BattleActions, species: Species, deltas: AnyObject) => Species;
+	getFormeChangeDeltas?: (this: BattleActions, formeChangeSpecies: Species, pokemon?: Pokemon) => AnyObject;
+	getMixedSpecies?: (this: BattleActions, originalName: string, megaName: string, pokemon?: Pokemon) => Species;
 }
 
 interface ModdedBattleSide {
+	canDynamaxNow?: (this: Side) => boolean;
 	getRequestData?: (this: Side, forAlly?: boolean) => {name: string, id: ID, pokemon: AnyObject[]};
 }
 
@@ -308,24 +318,41 @@ interface ModdedBattlePokemon {
 	inherit?: true;
 	lostItemForDelibird?: Item | null;
 	boostBy?: (this: Pokemon, boost: SparseBoostsTable) => boolean | number;
+	clearBoosts?: (this: Pokemon) => void;
 	calculateStat?: (this: Pokemon, statName: StatIDExceptHP, boost: number, modifier?: number) => number;
 	cureStatus?: (this: Pokemon, silent?: boolean) => boolean;
+	deductPP?: (
+		this: Pokemon, move: string | Move, amount?: number | null, target?: Pokemon | null | false
+	) => number;
+	eatItem?: (this: Pokemon, force?: boolean, source?: Pokemon, sourceEffect?: Effect) => boolean;
+	formeChange?: (
+		this: Pokemon, speciesId: string | Species, source: Effect, isPermanent?: boolean, message?: string
+	) => boolean;
+	hasType?: (this: Pokemon, type: string | string[]) => boolean;
 	getAbility?: (this: Pokemon) => Ability;
 	getActionSpeed?: (this: Pokemon) => number;
+	getItem?: (this: Pokemon) => Item;
 	getMoveRequestData?: (this: Pokemon) => {
 		moves: {move: string, id: ID, target?: string, disabled?: boolean}[],
 		maybeDisabled?: boolean, trapped?: boolean, maybeTrapped?: boolean,
 		canMegaEvo?: boolean, canUltraBurst?: boolean, canZMove?: ZMoveOptions,
 	};
+	getMoves?: (this: Pokemon, lockedMove?: string | null, restrictData?: boolean) => {
+		move: string, id: string, disabled?: string | boolean, disabledSource?: string,
+		target?: string, pp?: number, maxpp?: number,
+	}[];
 	getStat?: (
 		this: Pokemon, statName: StatIDExceptHP, unboosted?: boolean, unmodified?: boolean, fastReturn?: boolean
 	) => number;
+	getTypes?: (this: Pokemon, excludeAdded?: boolean, preterastallized?: boolean) => string[];
 	getWeight?: (this: Pokemon) => number;
 	hasAbility?: (this: Pokemon, ability: string | string[]) => boolean;
+	hasItem?: (this: Pokemon, item: string | string[]) => boolean;
 	isGrounded?: (this: Pokemon, negateImmunity: boolean | undefined) => boolean | null;
 	modifyStat?: (this: Pokemon, statName: StatIDExceptHP, modifier: number) => void;
 	moveUsed?: (this: Pokemon, move: ActiveMove, targetLoc?: number) => void;
 	recalculateStats?: (this: Pokemon) => void;
+	runEffectiveness?: (this: Pokemon, move: ActiveMove) => number;
 	runImmunity?: (this: Pokemon, type: string, message?: string | boolean) => boolean;
 	setAbility?: (
 		this: Pokemon, ability: string | Ability, source: Pokemon | null, isFromFormeChange: boolean
@@ -335,7 +362,9 @@ interface ModdedBattlePokemon {
 		this: Pokemon, status: string | Condition, source: Pokemon | null,
 		sourceEffect: Effect | null, ignoreImmunities: boolean
 	) => boolean;
+	takeItem?: (this: Pokemon, source: Pokemon | undefined) => boolean | Item;
 	transformInto?: (this: Pokemon, pokemon: Pokemon, effect: Effect | null) => boolean;
+	useItem?: (this: Pokemon, source?: Pokemon, sourceEffect?: Effect) => boolean;
 	ignoringAbility?: (this: Pokemon) => boolean;
 	ignoringItem?: (this: Pokemon) => boolean;
 
@@ -366,14 +395,20 @@ interface ModdedBattleScriptsData extends Partial<BattleScriptsData> {
 	debug?: (this: Battle, activity: string) => void;
 	getActionSpeed?: (this: Battle, action: AnyObject) => void;
 	init?: (this: ModdedDex) => void;
+	maybeTriggerEndlessBattleClause?: (
+		this: Battle, trappedBySide: boolean[], stalenessBySide: ('internal' | 'external' | undefined)[]
+	) => boolean | undefined;
 	natureModify?: (this: Battle, stats: StatsTable, set: PokemonSet) => StatsTable;
 	nextTurn?: (this: Battle) => void;
+	runAction?: (this: Battle, action: Action) => void;
 	spreadModify?: (this: Battle, baseStats: StatsTable, set: PokemonSet) => StatsTable;
+	start?: (this: Battle) => void;
 	suppressingWeather?: (this: Battle) => boolean;
 	trunc?: (n: number) => number;
 	win?: (this: Battle, side?: SideID | '' | Side | null) => boolean;
-	faintMessages?: (this: Battle, lastFirst?: boolean) => boolean | undefined;
+	faintMessages?: (this: Battle, lastFirst?: boolean, forceCheck?: boolean, checkWin?: boolean) => boolean | undefined;
 	tiebreak?: (this: Battle) => boolean;
+	checkWin?: (this: Battle, faintQueue?: Battle['faintQueue'][0]) => true | undefined;
 }
 
 interface TypeData {
@@ -423,6 +458,7 @@ interface TextFile extends TextObject {
 	gen5?: ModdedTextObject;
 	gen6?: ModdedTextObject;
 	gen7?: ModdedTextObject;
+	gen8?: ModdedTextObject;
 }
 
 interface MovePlines extends Plines {
@@ -446,7 +482,9 @@ interface MovePlines extends Plines {
 }
 
 interface AbilityText extends TextFile, Plines {
+	activateFromItem?: string;
 	activateNoTarget?: string;
+	copyBoost?: string;
 	transformEnd?: string;
 }
 
@@ -466,6 +504,7 @@ namespace RandomTeamsTypes {
 	export interface TeamDetails {
 		megaStone?: number;
 		zMove?: number;
+		snow?: number;
 		hail?: number;
 		rain?: number;
 		sand?: number;
@@ -479,6 +518,7 @@ namespace RandomTeamsTypes {
 		screens?: number;
 		illusion?: number;
 		statusCure?: number;
+		teraBlast?: number;
 	}
 	export interface FactoryTeamDetails {
 		megaCount?: number;
@@ -506,7 +546,10 @@ namespace RandomTeamsTypes {
 		shiny: boolean;
 		nature?: string;
 		happiness?: number;
+		dynamaxLevel?: number;
 		gigantamax?: boolean;
+		teraType?: string;
+		role?: Role;
 	}
 	export interface RandomFactorySet {
 		name: string;
@@ -521,6 +564,22 @@ namespace RandomTeamsTypes {
 		ivs: SparseStatsTable;
 		nature: string;
 		moves: string[];
+		dynamaxLevel?: number;
 		gigantamax?: boolean;
 	}
+	export interface RandomSetData {
+		role: Role;
+		movepool: string[];
+		teraTypes?: string[];
+		preferredTypes?: string[];
+	}
+	export interface RandomSpeciesData {
+		level?: number;
+		sets: RandomSetData[];
+	}
+	export type Role = '' | 'Fast Attacker' | 'Setup Sweeper' | 'Wallbreaker' | 'Tera Blast user' |
+	'Bulky Attacker' | 'Bulky Setup' | 'Fast Bulky Setup' | 'Bulky Support' | 'Fast Support' | 'AV Pivot' |
+	'Doubles Fast Attacker' | 'Doubles Setup Sweeper' | 'Doubles Wallbreaker' | 'Doubles Bulky Attacker' |
+	'Doubles Bulky Setup' | 'Offensive Protect' | 'Bulky Protect' | 'Doubles Support' | 'Choice Item user' |
+	'Z-Move user' | 'Staller' | 'Spinner' | 'Generalist' | 'Berry Sweeper' | 'Thief user';
 }

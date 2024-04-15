@@ -343,86 +343,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		type: "Steel",
 	},
 
-	// Alpha
-	blisteringiceage: {
-		accuracy: true,
-		basePower: 190,
-		category: "Special",
-		desc: "User's ability becomes Ice Age, and the weather becomes an extremely heavy hailstorm that prevents damaging Steel-type moves from executing, causes Ice-type moves to be 50% stronger, causes all non-Ice-type Pokemon on the opposing side to take 1/8 damage from hail, and causes all moves to have a 10% chance to freeze. This weather bypasses Magic Guard and Overcoat. This weather remains in effect until the 3 turns are up, or the weather is changed by Delta Stream, Desolate Land, or Primordial Sea.",
-		shortDesc: "Weather: Steel fail. 1.5x Ice.",
-		name: "Blistering Ice Age",
-		gen: 8,
-		pp: 1,
-		noPPBoosts: true,
-		priority: 0,
-		flags: {},
-		onTryMove() {
-			this.attrLastMove('[still]');
-		},
-		onPrepareHit(target, source) {
-			this.add('-anim', source, 'Hail', target);
-			this.add('-anim', target, 'Subzero Slammer', target);
-			this.add('-anim', source, 'Subzero Slammer', source);
-		},
-		onAfterMove(source) {
-			source.baseAbility = 'iceage' as ID;
-			source.setAbility('iceage');
-			this.add('-ability', source, source.getAbility().name, '[from] move: Blistering Ice Age');
-		},
-		isZ: "caioniumz",
-		secondary: null,
-		target: "normal",
-		type: "Ice",
-	},
-
-	// Andrew
-	whammerjammer: {
-		accuracy: 100,
-		basePower: 60,
-		category: "Special",
-		desc: "If this move is successful, the user switches out and all field conditions (entry hazards, terrains, weathers, screens, etc.) are removed from both sides.",
-		shortDesc: "Removes field conditions, switches out.",
-		name: "Whammer Jammer",
-		pp: 15,
-		priority: 0,
-		flags: {protect: 1, mirror: 1},
-		onTryMove() {
-			this.attrLastMove('[still]');
-		},
-		onPrepareHit(target, source) {
-			this.add('-anim', source, 'Shadow Ball', target);
-		},
-		onHit(target, source, move) {
-			const removeAll = [
-				'reflect', 'lightscreen', 'auroraveil', 'safeguard', 'mist', 'spikes',
-				'toxicspikes', 'stealthrock', 'stickyweb', 'gmaxsteelsurge',
-			];
-			const silentRemove = ['reflect', 'lightscreen', 'auroraveil', 'safeguard', 'mist'];
-			for (const sideCondition of removeAll) {
-				if (target.side.removeSideCondition(sideCondition)) {
-					if (!silentRemove.includes(sideCondition)) {
-						this.add('-sideend', target.side, this.dex.conditions.get(sideCondition).name, '[from] move: Whammer Jammer', '[of] ' + source);
-					}
-				}
-				if (source.side.removeSideCondition(sideCondition)) {
-					if (!silentRemove.includes(sideCondition)) {
-						this.add('-sideend', source.side, this.dex.conditions.get(sideCondition).name, '[from] move: Whammer Jammer', '[of] ' + source);
-					}
-				}
-			}
-			this.field.clearWeather();
-			this.field.clearTerrain();
-			for (const clear in this.field.pseudoWeather) {
-				if (clear.endsWith('mod') || clear.endsWith('clause')) continue;
-				this.field.removePseudoWeather(clear);
-			}
-		},
-		selfSwitch: true,
-		secondary: null,
-		target: "normal",
-		type: "Ghost",
-	},
-
 	// Annika
 	datacorruption: {
 		accuracy: true,
@@ -648,7 +568,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		onPrepareHit(target, source) {
 			this.add('-anim', target, 'Close Combat', target);
 			this.add('-anim', target, 'Earthquake', target);
-			this.add(`c|${getName('Archas')}|Fire all guns! Fiiiiire!`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Archas')}|Fire all guns! Fiiiiire!`);
 		},
 		onEffectiveness(typeMod, target, type) {
 			if (type === 'Steel') return 1;
@@ -696,7 +616,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			}
 		},
 		onHit(target, pokemon) {
-			this.add(`c|${getName('Arcticblast')}|YEET`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Arcticblast')}|YEET`);
 			if (pokemon.volatiles['brilliant']) pokemon.removeVolatile('brilliant');
 		},
 		secondary: null,
@@ -853,7 +773,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		onPrepareHit(target, source) {
 			this.add('-anim', source, 'Spirit Break', target);
 		},
-		useSourceDefensiveAsOffensive: true,
+		overrideOffensiveStat: 'spd',
 		secondary: null,
 		target: "normal",
 		type: "Fairy",
@@ -878,7 +798,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'Petal Dance', target);
 		},
 		onModifyMove(move, source, target) {
-			if (target && target.getStat('def') < target.getStat('spd')) {
+			if (target && target.getStat('def', false, true) < target.getStat('spd', false, true)) {
 				move.category = "Physical";
 			}
 		},
@@ -906,6 +826,14 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 					return 8;
 				}
 				return 5;
+			},
+			onModifyMove(move, source, target) {
+				if (move.overrideOffensiveStat && !['atk', 'spa'].includes(move.overrideOffensiveStat)) return;
+				const attacker = move.overrideOffensivePokemon === 'target' ? target : source;
+				if (!attacker) return;
+				const attackerAtk = attacker.getStat('atk', false, true);
+				const attackerSpa = attacker.getStat('spa', false, true);
+				move.overrideOffensiveStat = attackerAtk > attackerSpa ? 'spa' : 'atk';
 			},
 			// Stat modifying in scripts.ts
 			onFieldStart(field, source, effect) {
@@ -1324,7 +1252,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'Boomburst', target);
 		},
 		onHit() {
-			this.add(`c|${getName('drampa\'s grandpa')}|GET OFF MY LAWN!!!`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('drampa\'s grandpa')}|GET OFF MY LAWN!!!`);
 		},
 		secondary: null,
 		forceSwitch: true,
@@ -1539,7 +1467,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'Endeavor', target);
 		},
 		onHit(target, source) {
-			this.add(`c|${getName('explodingdaisies')}|You have no hope ${target.name}!`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('explodingdaisies')}|You have no hope ${target.name}!`);
 		},
 		secondary: null,
 		target: "normal",
@@ -1582,9 +1510,9 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		onHit(target, source) {
 			this.add('-anim', source, 'Spectral Thief', target);
 			if (this.randomChance(1, 2)) {
-				this.add(`c|${getName('fart')}|I hl on soup`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('fart')}|I hl on soup`);
 			} else {
-				this.add(`c|${getName('fart')}|I walk with purpose. bring me soup.`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('fart')}|I walk with purpose. bring me soup.`);
 			}
 		},
 		condition: {
@@ -1797,7 +1725,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			chance: 10,
 			status: 'frz',
 			onHit() {
-				this.add(`c|${getName('Gimmick')}|Show me some more paaain, baaaby`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Gimmick')}|Show me some more paaain, baaaby`);
 			},
 		},
 		thawsTarget: true,
@@ -1860,7 +1788,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			const details = target.species.name + (target.level === 100 ? '' : ', L' + target.level) +
 				(target.gender === '' ? '' : ', ' + target.gender) + (target.set.shiny ? ', shiny' : '');
 			if (shiny) this.add('replace', target, details);
-			if (message) this.add(`c|${getName('GMars')}|${message}`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('GMars')}|${message}`);
 			target.setAbility('capsulearmor');
 			target.baseAbility = target.ability;
 			if (target.set.shiny) return;
@@ -2145,7 +2073,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		},
 		onAfterMoveSecondarySelf(pokemon, target, move) {
 			if (!target || target.fainted || target.hp <= 0) {
-				this.add(`c|${getName('Jett')}|Owned!`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Jett')}|Owned!`);
 			}
 		},
 		condition: {
@@ -2413,10 +2341,11 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		onTryMove() {
 			this.attrLastMove('[still]');
 		},
-		onTryHit(pokemon, target, move) {
-			if (!this.canSwitch(pokemon.side)) {
-				delete move.selfdestruct;
-				return false;
+		onTryHit(source) {
+			if (!this.canSwitch(source.side)) {
+				this.attrLastMove('[still]');
+				this.add('-fail', source);
+				return this.NOT_FAIL;
 			}
 		},
 		selfdestruct: "ifHit",
@@ -2813,9 +2742,8 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		gen: 8,
 		pp: 15,
 		priority: 0,
-		flags: {},
+		flags: {futuremove: 1},
 		ignoreImmunity: true,
-		isFutureMove: true,
 		onTry(source, target) {
 			this.attrLastMove('[still]');
 			if (!target.side.addSlotCondition(target, 'futuremove')) return false;
@@ -2832,10 +2760,9 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 					basePower: 110,
 					category: "Special",
 					priority: 0,
-					flags: {},
+					flags: {futuremove: 1},
 					ignoreImmunity: false,
 					effectType: 'Move',
-					isFutureMove: true,
 					type: 'Psychic',
 				},
 			});
@@ -2959,12 +2886,12 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		onHit(target, source) {
 			for (const move of ['Haze', 'Worry Seed', 'Poison Powder', 'Stun Spore', 'Leech Seed']) {
 				this.actions.useMove(move, source);
-				this.add(`c|${getName('Meicoo')}|That is not the answer - try again!`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Meicoo')}|That is not the answer - try again!`);
 			}
 			const strgl = this.dex.getActiveMove('Struggle');
 			strgl.basePower = 150;
 			this.actions.useMove(strgl, source);
-			this.add(`c|${getName('Meicoo')}|That is not the answer - try again!`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Meicoo')}|That is not the answer - try again!`);
 		},
 		secondary: null,
 		target: "self",
@@ -3080,7 +3007,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		type: "Fairy",
 	},
 
-	// Nol
+	// Theia
 	madhacks: {
 		accuracy: true,
 		basePower: 0,
@@ -3130,7 +3057,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'Never-Ending Nightmare', target);
 		},
 		onHit() {
-			this.add(`c|${getName('Notater517')}|/html For more phantasmic music, check out <a href = "http://spo.ink/tunes">this link.</a>`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Notater517')}|/html For more phantasmic music, check out <a href = "http://spo.ink/tunes">this link.</a>`);
 		},
 		self: {
 			volatileStatus: 'mustrecharge',
@@ -3194,7 +3121,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'U-turn', target);
 		},
 		onHit() {
-			this.add(`c|${getName('OM~!')}|Bang Bang`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('OM~!')}|Bang Bang`);
 		},
 		flags: {protect: 1, mirror: 1},
 		selfSwitch: true,
@@ -3356,7 +3283,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		},
 		onAfterMoveSecondarySelf(pokemon, target, move) {
 			if (!target || target.fainted || target.hp <= 0) {
-				this.add(`c|${getName('PartMan')}|FOR SNOM!`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('PartMan')}|FOR SNOM!`);
 				this.boost({spa: 1}, pokemon, pokemon, move);
 			}
 		},
@@ -3415,7 +3342,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, "Trick", target);
 		},
 		onHit(target, source, effect) {
-			this.add(`c|${getName('Perish Song')}|/html <img src="https://i.imgflip.com/3rt1d8.png" width="262" height="150" />`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Perish Song')}|/html <img src="https://i.imgflip.com/3rt1d8.png" width="262" height="150" />`);
 			const item = target.takeItem(source);
 			if (!target.item) {
 				if (item) this.add('-enditem', target, item.name, '[from] move: Trickery', '[of] ' + source);
@@ -3521,7 +3448,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'Shell Smash', source);
 		},
 		onHit(target, source, move) {
-			this.add(`c|${getName('PiraTe Princess')}|did someone say d&d?`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('PiraTe Princess')}|did someone say d&d?`);
 			target.addVolatile('trapped', source, move, 'trapper');
 			if (!target.hasType('Dragon') && target.addType('Dragon')) {
 				this.add('-start', target, 'typeadd', 'Dragon', '[from] move: Dungeons & Dragons');
@@ -3705,48 +3632,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		type: "Psychic",
 	},
 
-	// Rach
-	spindawheel: {
-		accuracy: true,
-		basePower: 0,
-		category: "Status",
-		desc: "The user uses a random hazard-setting move; burns, badly poisons, or paralyzes the target; and then switches out.",
-		shortDesc: "Sets random hazard; brn/tox/par; switches.",
-		name: "Spinda Wheel",
-		gen: 8,
-		pp: 20,
-		priority: 0,
-		flags: {reflectable: 1, protect: 1},
-		onTryMove() {
-			this.attrLastMove('[still]');
-		},
-		onPrepareHit(target, source) {
-			target.m.spindaHazard = this.sample(['Sticky Web', 'Stealth Rock', 'Spikes', 'Toxic Spikes', 'G-Max Steelsurge']);
-			target.m.spindaStatus = this.sample(['Thunder Wave', 'Toxic', 'Will-O-Wisp']);
-			if (target.m.spindaHazard) {
-				this.add('-anim', source, target.m.spindaHazard, target);
-			}
-			if (target.m.spindaStatus) {
-				this.add('-anim', source, target.m.spindaStatus, target);
-			}
-		},
-		onHit(target, source, move) {
-			if (target) {
-				if (target.m.spindaHazard) {
-					target.side.addSideCondition(target.m.spindaHazard);
-				}
-				if (target.m.spindaStatus) {
-					const s = target.m.spindaStatus;
-					target.trySetStatus(s === 'Toxic' ? 'tox' : s === 'Thunder Wave' ? 'par' : 'brn');
-				}
-			}
-		},
-		selfSwitch: true,
-		secondary: null,
-		target: "normal",
-		type: "Normal",
-	},
-
 	// Rage
 	shockedlapras: {
 		accuracy: 100,
@@ -3843,7 +3728,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.attrLastMove('[still]');
 		},
 		onHit() {
-			this.add(`c|${getName('Raihan Kibana')}|Let the winds blow! Stream forward, Sandstorm!`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Raihan Kibana')}|Let the winds blow! Stream forward, Sandstorm!`);
 		},
 		onPrepareHit(target, source) {
 			this.add('-anim', source, 'Rock Slide', target);
@@ -4137,7 +4022,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 					}
 				}
 				this.boost({def: 1, spd: 1}, source);
-				this.add(`c|${getName('Sectonia')}|Jelly baby ;w;`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Sectonia')}|Jelly baby ;w;`);
 			},
 		},
 		secondary: null,
@@ -4166,7 +4051,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'Curse', target);
 		},
 		onHit(pokemon, source, move) {
-			this.add(`c|${getName('Segmr')}|I don't like naruto actually let someone else write this message plz.`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Segmr')}|I don't like naruto actually let someone else write this message plz.`);
 			this.directDamage(source.maxhp / 4, source, source);
 			pokemon.addVolatile('curse');
 			pokemon.addVolatile('trapped', source, move, 'trapper');
@@ -4196,7 +4081,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.add('-anim', source, 'Sludge Bomb', target);
 		},
 		onHit() {
-			this.add(`c|${getName('sejesensei')}|Please go read To Love-Ru I swear its really good, wait... don’t leave…`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('sejesensei')}|Please go read To Love-Ru I swear its really good, wait... don’t leave…`);
 		},
 		self: {
 			boosts: {
@@ -4219,9 +4104,9 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			const move = action?.choice === 'move' ? action.move : null;
 			if (!move || (move.category === 'Status' && move.id !== 'mefirst') || target.volatiles['mustrecharge']) {
 				if (move?.category === 'Status') {
-					this.add(`c|${getName('Seso')}|Irritating a better swordsman than yourself is always a good way to end up dead.`);
+					this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Seso')}|Irritating a better swordsman than yourself is always a good way to end up dead.`);
 				} else {
-					this.add(`c|${getName('Seso')}|Scars on the back are a swordsman's shame.`);
+					this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Seso')}|Scars on the back are a swordsman's shame.`);
 				}
 				return false;
 			}
@@ -4242,7 +4127,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.attrLastMove('[still]');
 		},
 		onPrepareHit(target, source) {
-			this.add(`c|${getName('Seso')}|FORWARD!`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Seso')}|FORWARD!`);
 			this.add('-anim', source, 'Gear Grind', target);
 			this.add('-anim', source, 'Thief', target);
 		},
@@ -4400,6 +4285,8 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		accuracy: true,
 		basePower: 110,
 		category: "Physical",
+		overrideOffensivePokemon: 'target',
+		overrideOffensiveStat: 'spd',
 		desc: "This move uses the target's Special Defense to calculate damage (like Foul Play). This move is neutrally effective against Steel-types.",
 		shortDesc: "Uses foe's SpD as user's Atk. Hits Steel.",
 		name: "I'm Toxic You're Slippin' Under",
@@ -4452,7 +4339,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		},
 		onHit(target, source) {
 			if (source.m.statsRaisedLastTurn) {
-				this.add(`c|${getName('Struchni')}|**veto**`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Struchni')}|**veto**`);
 			}
 		},
 		target: "normal",
@@ -4569,7 +4456,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		onEffectiveness(typeMod, target, type) {
 			if (type === 'Fire') return 1;
 		},
-		useSourceDefensiveAsOffensive: true,
+		overrideOffensiveStat: 'def',
 		secondary: {
 			chance: 10,
 			status: "frz",
@@ -4608,9 +4495,9 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 				successes++;
 			}
 			if (successes === 1) {
-				this.add(`c|${getName('tiki')}|truly a dumpster fire`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('tiki')}|truly a dumpster fire`);
 			} else if (successes >= 4) {
-				this.add(`c|${getName('tiki')}|whos ${source.side.foe.name}?`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('tiki')}|whos ${source.side.foe.name}?`);
 			}
 		},
 		secondary: null,
@@ -4771,7 +4658,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 				target.faint(source, move);
 				source.faint(source, move);
 			} else if ([1024, 2048, 3072, 4096].includes(random)) {
-				this.add(`c|${getName('Volco')}|haha memory corruption go brrr...`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Volco')}|haha memory corruption go brrr...`);
 				target.forceSwitchFlag = true;
 				source.forceSwitchFlag = true;
 			} else if (random === 69) {
@@ -4784,7 +4671,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 				chance: 5,
 				onHit(target, source) {
 					const status = this.sample(['frz', 'par']);
-					this.add(`c|${getName('Volco')}|Ever just screw up the trick and corrupt the memory and cause the wrong thing to happen possibly ruining a run? No? Just me? okay...`);
+					this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Volco')}|Ever just screw up the trick and corrupt the memory and cause the wrong thing to happen possibly ruining a run? No? Just me? okay...`);
 					if (this.randomChance(1, 2)) {
 						target.trySetStatus(status);
 					} else {
@@ -4926,7 +4813,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			if (source.hp && target.takeItem(source)) {
 				this.add('-enditem', target, item.name, '[from] stealeat', '[move] Ingredient Foraging', '[of] ' + source);
 				this.heal(source.maxhp / 2, source);
-				this.add(`c|${getName('Zalm')}|Yum`);
+				this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Zalm')}|Yum`);
 				source.ateBerry = true;
 			}
 		},
@@ -4986,7 +4873,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			this.attrLastMove('[still]');
 		},
 		onPrepareHit() {
-			this.add(`c|${getName('Zodiax')}|There is a hail no storm okayyyyyy`);
+			this.add(`c:|${Math.floor(Date.now() / 1000)}|${getName('Zodiax')}|There is a hail no storm okayyyyyy`);
 		},
 		onTry(pokemon, target) {
 			pokemon.addVolatile('bigstormcomingmod');
@@ -5026,21 +4913,19 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		target: "self",
 		type: "Psychic",
 	},
-	// These moves need modified to support Alpha's move
+	// These moves need modified to support piloswine gripado's move
 	auroraveil: {
 		inherit: true,
-		desc: "For 5 turns, the user and its party members take 0.5x damage from physical and special attacks, or 0.66x damage if in a Double Battle; does not reduce damage further with Reflect or Light Screen. Critical hits ignore this protection. It is removed from the user's side if the user or an ally is successfully hit by Brick Break, Psychic Fangs, or Defog. Brick Break and Psychic Fangs remove the effect before damage is calculated. Lasts for 8 turns if the user is holding Light Clay. Fails unless the weather is Heavy Hailstorm or Hail.",
 		shortDesc: "For 5 turns, damage to allies is halved. Hail-like weather only.",
 		onTryHitSide() {
-			if (!this.field.isWeather(['winterhail', 'heavyhailstorm', 'hail'])) return false;
+			if (!this.field.isWeather(['winterhail', 'hail'])) return false;
 		},
 	},
 	blizzard: {
 		inherit: true,
-		desc: "Has a 10% chance to freeze the target. If the weather is Heavy Hailstorm or Hail, this move does not check accuracy.",
 		shortDesc: "10% freeze foe(s). Can't miss in Hail-like weather.",
 		onModifyMove(move) {
-			if (this.field.isWeather(['winterhail', 'heavyhailstorm', 'hail'])) move.accuracy = true;
+			if (this.field.isWeather(['winterhail', 'hail'])) move.accuracy = true;
 		},
 	},
 	dig: {
@@ -5048,7 +4933,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		condition: {
 			duration: 2,
 			onImmunity(type, pokemon) {
-				if (['sandstorm', 'winterhail', 'heavyhailstorm', 'hail'].includes(type)) return false;
+				if (['sandstorm', 'winterhail', 'hail'].includes(type)) return false;
 			},
 			onInvulnerability(target, source, move) {
 				if (['earthquake', 'magnitude'].includes(move.id)) {
@@ -5068,7 +4953,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		condition: {
 			duration: 2,
 			onImmunity(type, pokemon) {
-				if (['sandstorm', 'winterhail', 'heavyhailstorm', 'hail'].includes(type)) return false;
+				if (['sandstorm', 'winterhail', 'hail'].includes(type)) return false;
 			},
 			onInvulnerability(target, source, move) {
 				if (['surf', 'whirlpool'].includes(move.id)) {
@@ -5085,7 +4970,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	moonlight: {
 		inherit: true,
-		desc: "The user restores 1/2 of its maximum HP if Delta Stream or no weather conditions are in effect or if the user is holding Utility Umbrella, 2/3 of its maximum HP if the weather is Desolate Land or Sunny Day, and 1/4 of its maximum HP if the weather is Heavy Hailstorm, Hail, Primordial Sea, Rain Dance, or Sandstorm, all rounded half down.",
+		desc: "The user restores 1/2 of its maximum HP if Delta Stream or no weather conditions are in effect or if the user is holding Utility Umbrella, 2/3 of its maximum HP if the weather is Desolate Land or Sunny Day, and 1/4 of its maximum HP if the weather is Hail, Primordial Sea, Rain Dance, or Sandstorm, all rounded half down.",
 		onHit(pokemon) {
 			let factor = 0.5;
 			switch (pokemon.effectiveWeather()) {
@@ -5096,7 +4981,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			case 'raindance':
 			case 'primordialsea':
 			case 'sandstorm':
-			case 'heavyhailstorm':
 			case 'winterhail':
 			case 'hail':
 				factor = 0.25;
@@ -5107,7 +4991,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	morningsun: {
 		inherit: true,
-		desc: "The user restores 1/2 of its maximum HP if Delta Stream or no weather conditions are in effect or if the user is holding Utility Umbrella, 2/3 of its maximum HP if the weather is Desolate Land or Sunny Day, and 1/4 of its maximum HP if the weather is Heavy Hailstorm, Hail, Primordial Sea, Rain Dance, or Sandstorm, all rounded half down.",
+		desc: "The user restores 1/2 of its maximum HP if Delta Stream or no weather conditions are in effect or if the user is holding Utility Umbrella, 2/3 of its maximum HP if the weather is Desolate Land or Sunny Day, and 1/4 of its maximum HP if the weather is Hail, Primordial Sea, Rain Dance, or Sandstorm, all rounded half down.",
 		onHit(pokemon) {
 			let factor = 0.5;
 			switch (pokemon.effectiveWeather()) {
@@ -5118,7 +5002,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			case 'raindance':
 			case 'primordialsea':
 			case 'sandstorm':
-			case 'heavyhailstorm':
 			case 'winterhail':
 			case 'hail':
 				factor = 0.25;
@@ -5129,9 +5012,9 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	solarbeam: {
 		inherit: true,
-		desc: "This attack charges on the first turn and executes on the second. Power is halved if the weather is Heavy Hailstorm, Hail, Primordial Sea, Rain Dance, or Sandstorm and the user is not holding Utility Umbrella. If the user is holding a Power Herb or the weather is Desolate Land or Sunny Day, the move completes in one turn. If the user is holding Utility Umbrella and the weather is Desolate Land or Sunny Day, the move still requires a turn to charge.",
+		desc: "This attack charges on the first turn and executes on the second. Power is halved if the weather is Hail, Primordial Sea, Rain Dance, or Sandstorm and the user is not holding Utility Umbrella. If the user is holding a Power Herb or the weather is Desolate Land or Sunny Day, the move completes in one turn. If the user is holding Utility Umbrella and the weather is Desolate Land or Sunny Day, the move still requires a turn to charge.",
 		onBasePower(basePower, pokemon, target) {
-			const weathers = ['raindance', 'primordialsea', 'sandstorm', 'winterhail', 'heavyhailstorm', 'hail'];
+			const weathers = ['raindance', 'primordialsea', 'sandstorm', 'winterhail', 'hail'];
 			if (weathers.includes(pokemon.effectiveWeather())) {
 				this.debug('weakened by weather');
 				return this.chainModify(0.5);
@@ -5140,9 +5023,9 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	solarblade: {
 		inherit: true,
-		desc: "This attack charges on the first turn and executes on the second. Power is halved if the weather is Heavy Hailstorm, Hail, Primordial Sea, Rain Dance, or Sandstorm and the user is not holding Utility Umbrella. If the user is holding a Power Herb or the weather is Desolate Land or Sunny Day, the move completes in one turn. If the user is holding Utility Umbrella and the weather is Desolate Land or Sunny Day, the move still requires a turn to charge.",
+		desc: "This attack charges on the first turn and executes on the second. Power is halved if the weather is Hail, Primordial Sea, Rain Dance, or Sandstorm and the user is not holding Utility Umbrella. If the user is holding a Power Herb or the weather is Desolate Land or Sunny Day, the move completes in one turn. If the user is holding Utility Umbrella and the weather is Desolate Land or Sunny Day, the move still requires a turn to charge.",
 		onBasePower(basePower, pokemon, target) {
-			const weathers = ['raindance', 'primordialsea', 'sandstorm', 'winterhail', 'heavyhailstorm', 'hail'];
+			const weathers = ['raindance', 'primordialsea', 'sandstorm', 'winterhail', 'hail'];
 			if (weathers.includes(pokemon.effectiveWeather())) {
 				this.debug('weakened by weather');
 				return this.chainModify(0.5);
@@ -5151,7 +5034,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	synthesis: {
 		inherit: true,
-		desc: "The user restores 1/2 of its maximum HP if Delta Stream or no weather conditions are in effect or if the user is holding Utility Umbrella, 2/3 of its maximum HP if the weather is Desolate Land or Sunny Day, and 1/4 of its maximum HP if the weather is Heavy Hailstorm, Hail, Primordial Sea, Rain Dance, or Sandstorm, all rounded half down.",
+		desc: "The user restores 1/2 of its maximum HP if Delta Stream or no weather conditions are in effect or if the user is holding Utility Umbrella, 2/3 of its maximum HP if the weather is Desolate Land or Sunny Day, and 1/4 of its maximum HP if the weather is Hail, Primordial Sea, Rain Dance, or Sandstorm, all rounded half down.",
 		onHit(pokemon) {
 			let factor = 0.5;
 			switch (pokemon.effectiveWeather()) {
@@ -5162,7 +5045,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			case 'raindance':
 			case 'primordialsea':
 			case 'sandstorm':
-			case 'heavyhailstorm':
 			case 'winterhail':
 			case 'hail':
 				factor = 0.25;
@@ -5173,7 +5055,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	weatherball: {
 		inherit: true,
-		desc: "Power doubles if a weather condition other than Delta Stream is active, and this move's type changes to match. Ice type during Heavy Hailstorm or Hail, Water type during Primordial Sea or Rain Dance, Rock type during Sandstorm, and Fire type during Desolate Land or Sunny Day. If the user is holding Utility Umbrella and uses Weather Ball during Primordial Sea, Rain Dance, Desolate Land, or Sunny Day, the move is still Normal-type and does not have a base power boost.",
+		desc: "Power doubles if a weather condition other than Delta Stream is active, and this move's type changes to match. Ice type during Hail, Water type during Primordial Sea or Rain Dance, Rock type during Sandstorm, and Fire type during Desolate Land or Sunny Day. If the user is holding Utility Umbrella and uses Weather Ball during Primordial Sea, Rain Dance, Desolate Land, or Sunny Day, the move is still Normal-type and does not have a base power boost.",
 		onModifyType(move, pokemon) {
 			switch (pokemon.effectiveWeather()) {
 			case 'sunnyday':
@@ -5187,7 +5069,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			case 'sandstorm':
 				move.type = 'Rock';
 				break;
-			case 'heavyhailstorm':
 			case 'winterhail':
 			case 'hail':
 				move.type = 'Ice';
@@ -5207,7 +5088,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			case 'sandstorm':
 				move.basePower *= 2;
 				break;
-			case 'heavyhailstorm':
 			case 'winterhail':
 			case 'hail':
 				move.basePower *= 2;
@@ -5266,7 +5146,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	// genderless infatuation for nui's Condition Override
 	attract: {
 		inherit: true,
-		volatileStatus: 'attract',
 		condition: {
 			noCopy: true, // doesn't get copied by Baton Pass
 			onStart(pokemon, source, effect) {
@@ -5315,11 +5194,13 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 				this.add('-end', pokemon, 'Attract', '[silent]');
 			},
 		},
+		onTryImmunity(target, source) {
+			if (source.hasAbility('conditionoverride')) return true;
+			return (target.gender === 'M' && source.gender === 'F') || (target.gender === 'F' && source.gender === 'M');
+		},
 	},
 
-	// :^)
-	// Remnant of an AFD past. Thank u for the memes.
-	/*
+	// Try playing Staff Bros without dynamax and see what happens
 	supermetronome: {
 		accuracy: true,
 		basePower: 0,
@@ -5363,5 +5244,4 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		target: "self",
 		type: "???",
 	},
-	*/
 };

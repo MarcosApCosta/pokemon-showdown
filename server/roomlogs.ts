@@ -7,7 +7,7 @@
  * @license MIT
  */
 
-import {FS, Utils} from '../lib';
+import {FS, Utils, type Streams} from '../lib';
 import type {PartialModlogEntry} from './modlog';
 
 interface RoomlogOptions {
@@ -56,6 +56,7 @@ export class Roomlog {
 	 * Scrollback log
 	 */
 	log: string[];
+	visibleMessageCount = 0;
 	broadcastBuffer: string[];
 	/**
 	 * undefined = uninitialized,
@@ -93,7 +94,7 @@ export class Roomlog {
 			const line = this.log[i];
 			const split = /\|split\|p(\d)/g.exec(line);
 			if (split) {
-				const canSeePrivileged = (channel === Number(split[0]) || channel === -1);
+				const canSeePrivileged = (channel === Number(split[1]) || channel === -1);
 				const ownLine = this.log[i + (canSeePrivileged ? 1 : 2)];
 				if (ownLine) log.push(ownLine);
 				i += 2;
@@ -143,6 +144,11 @@ export class Roomlog {
 	}
 	add(message: string) {
 		this.roomlog(message);
+		// |uhtml gets both uhtml and uhtmlchange
+		// which are visible and so should be counted
+		if (['|c|', '|c:|', '|raw|', '|html|', '|uhtml'].some(k => message.startsWith(k))) {
+			this.visibleMessageCount++;
+		}
 		message = this.withTimestamp(message);
 		this.log.push(message);
 		this.broadcastBuffer.push(message);
@@ -204,15 +210,18 @@ export class Roomlog {
 	attributedUhtmlchange(user: User, name: string, message: string) {
 		const start = `/uhtmlchange ${name},`;
 		const fullMessage = this.withTimestamp(`|c|${user.getIdentity()}|${start}${message}`);
+		let matched = false;
 		for (const [i, line] of this.log.entries()) {
 			if (this.parseChatLine(line)?.message.startsWith(start)) {
 				this.log[i] = fullMessage;
+				matched = true;
 				break;
 			}
 		}
+		if (!matched) this.log.push(fullMessage);
 		this.broadcastBuffer.push(fullMessage);
 	}
-	private parseChatLine(line: string) {
+	parseChatLine(line: string) {
 		const messageStart = !this.noLogTimes ? '|c:|' : '|c|';
 		const section = !this.noLogTimes ? 4 : 3; // ['', 'c' timestamp?, author, message]
 		if (line.startsWith(messageStart)) {
@@ -275,8 +284,8 @@ export class Roomlog {
 	/**
 	 * Returns the total number of lines in the roomlog, including truncated lines.
 	 */
-	getLineCount() {
-		return this.log.length + this.numTruncatedLines;
+	getLineCount(onlyVisible = true) {
+		return (onlyVisible ? this.visibleMessageCount : this.log.length) + this.numTruncatedLines;
 	}
 
 	destroy() {

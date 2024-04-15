@@ -134,6 +134,7 @@ export class Nature extends BasicEffect implements Readonly<BasicEffect & Nature
 	readonly minus?: StatIDExceptHP;
 	constructor(data: AnyObject) {
 		super(data);
+		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		data = this;
 
 		this.fullname = `nature: ${this.name}`;
@@ -177,7 +178,7 @@ export class DexNatures {
 			nature = new Nature({name: id, exists: false});
 		}
 
-		if (nature.exists) this.natureCache.set(id, nature);
+		if (nature.exists) this.natureCache.set(id, this.dex.deepFreeze(nature));
 		return nature;
 	}
 
@@ -187,7 +188,7 @@ export class DexNatures {
 		for (const id in this.dex.data.Natures) {
 			natures.push(this.getByID(id as ID));
 		}
-		this.allCache = natures;
+		this.allCache = Object.freeze(natures);
 		return this.allCache;
 	}
 }
@@ -277,7 +278,7 @@ export class DexTypes {
 			type = new TypeInfo({name: typeName, id, exists: false, effectType: 'EffectType'});
 		}
 
-		if (type.exists) this.typeCache.set(id, type);
+		if (type.exists) this.typeCache.set(id, this.dex.deepFreeze(type));
 		return type;
 	}
 
@@ -301,7 +302,7 @@ export class DexTypes {
 		for (const id in this.dex.data.TypeChart) {
 			types.push(this.getByID(id as ID));
 		}
-		this.allCache = types;
+		this.allCache = Object.freeze(types);
 		return this.allCache;
 	}
 }
