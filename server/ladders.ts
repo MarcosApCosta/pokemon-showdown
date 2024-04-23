@@ -481,7 +481,6 @@ class Ladder extends LadderStore {
 			}
 			return undefined;
 		}
-		const format = Dex.formats.get(formatid);
 		const delayedStart = format.playerCount > players.length ? 'multi' : false;
 		return Rooms.createBattle({
 			format: formatid,
