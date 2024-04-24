@@ -23,7 +23,7 @@ export const Formats: FormatList = [
 	},
 	{
 		name: "[Gen 9] Random Mirror Battle",
-		mod: 'gen8',
+		mod: 'gen9',
 		team: 'random',
 		ruleset: ['[Gen 9] Random Battle', 'Mirror Clause', 'Team Preview']
 	},
