@@ -1236,35 +1236,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			},
 		},
 	},
-	pursuit: {
-		inherit: true,
-		condition: {
-			duration: 1,
-			onBeforeSwitchOut(pokemon) {
-				this.debug('Pursuit start');
-				let alreadyAdded = false;
-				for (const source of this.effectState.sources) {
-					if (!this.queue.cancelMove(source) || !source.hp) continue;
-					if (!alreadyAdded) {
-						this.add('-activate', pokemon, 'move: Pursuit');
-						alreadyAdded = true;
-					}
-					// Run through each action in queue to check if the Pursuit user is supposed to Mega Evolve this turn.
-					// If it is, then Mega Evolve before moving.
-					if (source.canMegaEvo || source.canUltraBurst) {
-						for (const [actionIndex, action] of this.queue.entries()) {
-							if (action.pokemon === source && action.choice === 'megaEvo') {
-								this.actions.runMegaEvo(source);
-								this.queue.list.splice(actionIndex, 1);
-								break;
-							}
-						}
-					}
-					this.actions.runMove('pursuit', source, source.getLocOf(pokemon));
-				}
-			},
-		},
-	},
 	rapidspin: {
 		inherit: true,
 		self: {
@@ -1725,36 +1696,6 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 				} else {
 					this.add('-fieldstart', 'move: Trick Room', '[of] ' + source);
 				}
-			},
-			onFieldRestart(target, source) {
-				this.field.removePseudoWeather('trickroom');
-			},
-			// Speed modification is changed in Pokemon.getActionSpeed() in sim/pokemon.js
-			onFieldResidualOrder: 13,
-			onFieldEnd() {
-				this.add('-fieldend', 'move: Trick Room');
-			},
-		},
-	},
-	trick: {
-		inherit: true,
-		onTryHit(target, source, move) {
-			if (target.hasAbility('multitype') || source.hasAbility('multitype')) return false;
-		},
-	},
-	trickroom: {
-		inherit: true,
-		condition: {
-			duration: 5,
-			durationCallback(source, effect) {
-				if (source?.hasAbility('persistent')) {
-					this.add('-activate', source, 'ability: Persistent', effect);
-					return 7;
-				}
-				return 5;
-			},
-			onFieldStart(target, source) {
-				this.add('-fieldstart', 'move: Trick Room', '[of] ' + source);
 			},
 			onFieldRestart(target, source) {
 				this.field.removePseudoWeather('trickroom');
